@@ -135,14 +135,40 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     files: { ...s.files, [projectId]: [...(s.files[projectId] || []), file] },
   })),
 
-  updateFileStatus: (projectId, fileId, status) => set((s) => ({
+  updateFileStatus: (projectId, fileId, status, entriesExtracted) => set((s) => ({
     files: {
       ...s.files,
       [projectId]: (s.files[projectId] || []).map((f) =>
-        f.id === fileId ? { ...f, status } : f
+        f.id === fileId ? { ...f, status, ...(entriesExtracted !== undefined ? { entriesExtracted } : {}) } : f
       ),
     },
   })),
+
+  deleteFile: (projectId, fileId) => set((s) => ({
+    files: {
+      ...s.files,
+      [projectId]: (s.files[projectId] || []).filter((f) => f.id !== fileId),
+    },
+  })),
+
+  setProjectEntries: (projectId, entries) => set((s) => ({
+    entries: { ...s.entries, [projectId]: entries },
+  })),
+
+  addProjectEntries: (projectId, entries) => set((s) => ({
+    entries: { ...s.entries, [projectId]: [...(s.entries[projectId] || []), ...entries] },
+  })),
+
+  setProjectMappings: (projectId, mappings) => set((s) => ({
+    mappings: { ...s.mappings, [projectId]: mappings },
+  })),
+
+  mergeProjectMappings: (projectId, newMappings) => set((s) => {
+    const existing = s.mappings[projectId] || [];
+    const existingCodes = new Set(existing.map(m => m.accountCode));
+    const toAdd = newMappings.filter(m => !existingCodes.has(m.accountCode));
+    return { mappings: { ...s.mappings, [projectId]: [...existing, ...toAdd] } };
+  }),
 
   updateMapping: (projectId, mappingId, category) => set((s) => ({
     mappings: {
