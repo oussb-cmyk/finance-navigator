@@ -4,9 +4,17 @@ import { Upload, FileText, FileSpreadsheet, File, Trash2, RefreshCw, Loader2 } f
 import { useProjectStore } from '@/store/useProjectStore';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Button } from '@/components/ui/button';
-import { parseFile } from '@/lib/fileParser';
+import { previewFile, parseFileWithMapping } from '@/lib/fileParser';
+import type { PreviewData, ColumnMapping } from '@/lib/fileParser';
+import { ColumnMappingDialog } from '@/components/workspace/ColumnMappingDialog';
 import { toast } from 'sonner';
 import type { UploadedFile } from '@/types/finance';
+
+interface PendingFile {
+  fileId: string;
+  rawFile: globalThis.File;
+  preview: PreviewData;
+}
 
 export default function DataCenterPage() {
   const { projectId } = useParams();
@@ -18,12 +26,13 @@ export default function DataCenterPage() {
   const mergeProjectMappings = useProjectStore((s) => s.mergeProjectMappings);
   const [dragOver, setDragOver] = useState(false);
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
-  // Store raw File objects for processing
   const [rawFiles, setRawFiles] = useState<Map<string, globalThis.File>>(new Map());
+  const [pendingFile, setPendingFile] = useState<PendingFile | null>(null);
 
-  const handleFiles = useCallback((fileList: FileList) => {
+  const handleFiles = useCallback(async (fileList: FileList) => {
     if (!projectId) return;
-    Array.from(fileList).forEach((f) => {
+
+    for (const f of Array.from(fileList)) {
       const ext = f.name.split('.').pop()?.toLowerCase();
       const type = ext === 'pdf' ? 'pdf' : ext === 'csv' ? 'csv' : 'xlsx';
       const fileId = `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -39,32 +48,45 @@ export default function DataCenterPage() {
       addFile(projectId, newFile);
       setRawFiles(prev => new Map(prev).set(fileId, f));
 
-      // Auto-process Excel and CSV files
       if (type === 'xlsx' || type === 'csv') {
-        processFileAsync(projectId, fileId, f);
+        try {
+          const preview = await previewFile(f);
+          if (preview.headers.length === 0) {
+            updateFileStatus(projectId, fileId, 'error');
+            toast.error(`No data found in ${f.name}`);
+            continue;
+          }
+          setPendingFile({ fileId, rawFile: f, preview });
+        } catch (err) {
+          updateFileStatus(projectId, fileId, 'error');
+          toast.error(`Failed to read ${f.name}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        }
       }
-    });
-  }, [projectId, addFile]);
+    }
+  }, [projectId, addFile, updateFileStatus]);
 
-  const processFileAsync = async (pid: string, fileId: string, file: globalThis.File) => {
+  const handleMappingConfirm = async (mapping: ColumnMapping) => {
+    if (!projectId || !pendingFile) return;
+    const { fileId, rawFile } = pendingFile;
+    setPendingFile(null);
+
     setProcessingIds(prev => new Set(prev).add(fileId));
-    updateFileStatus(pid, fileId, 'processing');
+    updateFileStatus(projectId, fileId, 'processing');
 
     try {
-      const result = await parseFile(file);
-
+      const result = await parseFileWithMapping(rawFile, mapping);
       if (result.entries.length === 0) {
-        updateFileStatus(pid, fileId, 'error');
-        toast.error(`No entries found in ${file.name}. Check column headers.`);
+        updateFileStatus(projectId, fileId, 'error');
+        toast.error(`No valid entries found in ${rawFile.name}. Check your column mapping.`);
       } else {
-        updateFileStatus(pid, fileId, 'processed', result.entriesExtracted);
-        addProjectEntries(pid, result.entries);
-        mergeProjectMappings(pid, result.mappings);
-        toast.success(`Extracted ${result.entriesExtracted} entries and ${result.mappings.length} accounts from ${file.name}`);
+        updateFileStatus(projectId, fileId, 'processed', result.entriesExtracted);
+        addProjectEntries(projectId, result.entries);
+        mergeProjectMappings(projectId, result.mappings);
+        toast.success(`Extracted ${result.entriesExtracted} entries and ${result.mappings.length} accounts from ${rawFile.name}`);
       }
     } catch (err) {
-      updateFileStatus(pid, fileId, 'error');
-      toast.error(`Failed to parse ${file.name}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      updateFileStatus(projectId, fileId, 'error');
+      toast.error(`Failed to parse ${rawFile.name}: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setProcessingIds(prev => {
         const next = new Set(prev);
@@ -80,13 +102,22 @@ export default function DataCenterPage() {
     if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
   }, [handleFiles]);
 
-  const handleReprocess = (fileId: string) => {
+  const handleReprocess = async (fileId: string) => {
     if (!projectId) return;
     const raw = rawFiles.get(fileId);
-    if (raw) {
-      processFileAsync(projectId, fileId, raw);
-    } else {
+    if (!raw) {
       toast.error('Original file not available. Please re-upload.');
+      return;
+    }
+    try {
+      const preview = await previewFile(raw);
+      if (preview.headers.length === 0) {
+        toast.error('No data found in file.');
+        return;
+      }
+      setPendingFile({ fileId, rawFile: raw, preview });
+    } catch {
+      toast.error('Failed to read file.');
     }
   };
 
@@ -110,7 +141,7 @@ export default function DataCenterPage() {
     <div>
       <div className="page-header">
         <h1 className="page-title">Data Center</h1>
-        <p className="page-subtitle">Upload and manage financial data files — Excel and CSV files are parsed automatically</p>
+        <p className="page-subtitle">Upload financial files — you'll map columns before processing</p>
       </div>
 
       <div
@@ -121,7 +152,7 @@ export default function DataCenterPage() {
       >
         <Upload className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
         <p className="text-sm font-medium text-foreground mb-1">Drag & drop files here</p>
-        <p className="text-xs text-muted-foreground mb-4">Excel (.xlsx, .xls) and CSV files are auto-parsed into journal entries</p>
+        <p className="text-xs text-muted-foreground mb-4">Excel (.xlsx, .xls) and CSV — you'll confirm column mapping before import</p>
         <Button variant="outline" size="sm" onClick={() => {
           const input = document.createElement('input');
           input.type = 'file';
@@ -185,6 +216,15 @@ export default function DataCenterPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {pendingFile && (
+        <ColumnMappingDialog
+          open={!!pendingFile}
+          onOpenChange={(open) => { if (!open) setPendingFile(null); }}
+          preview={pendingFile.preview}
+          onConfirm={handleMappingConfirm}
+        />
       )}
     </div>
   );
