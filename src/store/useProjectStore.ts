@@ -12,10 +12,15 @@ interface ProjectStore {
   addProject: (project: Project) => void;
   deleteProject: (id: string) => void;
   addFile: (projectId: string, file: UploadedFile) => void;
-  updateFileStatus: (projectId: string, fileId: string, status: UploadedFile['status']) => void;
+  updateFileStatus: (projectId: string, fileId: string, status: UploadedFile['status'], entriesExtracted?: number) => void;
   updateMapping: (projectId: string, mappingId: string, category: string) => void;
   addEntry: (projectId: string, entry: JournalEntry) => void;
   deleteEntry: (projectId: string, entryId: string) => void;
+  setProjectEntries: (projectId: string, entries: JournalEntry[]) => void;
+  addProjectEntries: (projectId: string, entries: JournalEntry[]) => void;
+  setProjectMappings: (projectId: string, mappings: AccountMapping[]) => void;
+  mergeProjectMappings: (projectId: string, mappings: AccountMapping[]) => void;
+  deleteFile: (projectId: string, fileId: string) => void;
   toggleEntryValidation: (projectId: string, entryId: string) => void;
   validateAllEntries: (projectId: string) => void;
 
