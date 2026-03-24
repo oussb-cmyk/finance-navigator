@@ -18,7 +18,8 @@ interface PendingFile {
 
 export default function DataCenterPage() {
   const { projectId } = useParams();
-  const files = useProjectStore((s) => s.getProjectFiles(projectId || ''));
+  const pid = projectId || '';
+  const files = useProjectStore((s) => s.files[pid] ?? []);
   const addFile = useProjectStore((s) => s.addFile);
   const updateFileStatus = useProjectStore((s) => s.updateFileStatus);
   const deleteFile = useProjectStore((s) => s.deleteFile);
