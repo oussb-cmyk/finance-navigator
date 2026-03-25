@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { Upload, FileText, FileSpreadsheet, File, Trash2, RefreshCw, Loader2 } from 'lucide-react';
+import { Upload, FileText, FileSpreadsheet, File, Trash2, RefreshCw, Loader2, AlertTriangle } from 'lucide-react';
 import { useProjectStore } from '@/store/useProjectStore';
 import { useLearningStore, generateFileFingerprint } from '@/store/useLearningStore';
 import type { CorrectionRecord } from '@/store/useLearningStore';
