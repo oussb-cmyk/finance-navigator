@@ -14,6 +14,8 @@ import type { ScoredRow } from '@/lib/confidenceScoring';
 import { ColumnMappingDialog } from '@/components/workspace/ColumnMappingDialog';
 import { HierarchicalPreviewDialog } from '@/components/workspace/HierarchicalPreviewDialog';
 import { ReviewValidationDialog } from '@/components/workspace/ReviewValidationDialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import type { UploadedFile } from '@/types/finance';
 
