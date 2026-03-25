@@ -246,8 +246,21 @@ export async function parseFileWithMapping(file: File, mapping: ColumnMapping): 
   const entries: JournalEntry[] = [];
   const accountSet = new Map<string, string>();
 
+  // Track hierarchical account context for ledger-style files
+  let currentAccount: { code: string; name: string } | null = null;
+
   rows.forEach((row, idx) => {
     if (isEmptyRow(row) || isTotalsRow(row)) return;
+
+    // Check if this is an account header row (hierarchical ledger)
+    const headerAccount = detectAccountHeader(row, mapping);
+    if (headerAccount) {
+      currentAccount = headerAccount;
+      if (!accountSet.has(headerAccount.code)) {
+        accountSet.set(headerAccount.code, headerAccount.name);
+      }
+      return; // Skip header rows — they aren't transactions
+    }
 
     let debit = 0;
     let credit = 0;
@@ -264,10 +277,19 @@ export async function parseFileWithMapping(file: File, mapping: ColumnMapping): 
     // Skip rows with no financial data
     if (debit === 0 && credit === 0) return;
 
-    const accountCode = mapping.account_code ? String(row[mapping.account_code] ?? '').trim() : '';
-    const accountName = mapping.account_name
+    // Use row's own account code, or inherit from the current hierarchical context
+    let accountCode = mapping.account_code ? String(row[mapping.account_code] ?? '').trim() : '';
+    let accountName = mapping.account_name
       ? String(row[mapping.account_name] ?? '').trim()
-      : (mapping.description ? String(row[mapping.description] ?? '').trim() : `Account ${idx + 1}`);
+      : (mapping.description ? String(row[mapping.description] ?? '').trim() : '');
+
+    if (!accountCode && currentAccount) {
+      accountCode = currentAccount.code;
+      accountName = accountName || currentAccount.name;
+    }
+    if (!accountName) {
+      accountName = currentAccount?.name || `Account ${idx + 1}`;
+    }
 
     if (accountCode && !accountSet.has(accountCode)) {
       accountSet.set(accountCode, accountName);
