@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { Upload, FileText, FileSpreadsheet, File, Trash2, RefreshCw, Loader2, AlertTriangle } from 'lucide-react';
+import { Upload, FileText, FileSpreadsheet, File, Trash2, RefreshCw, Loader2, AlertTriangle, Download, ShieldCheck, Sparkles } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { useProjectStore } from '@/store/useProjectStore';
 import { useLearningStore, generateFileFingerprint } from '@/store/useLearningStore';
 import type { CorrectionRecord } from '@/store/useLearningStore';
@@ -11,6 +12,7 @@ import { previewFile, parseFileWithMapping, hierarchicalToParseResult } from '@/
 import type { PreviewData, ColumnMapping, HierarchicalTransaction, DetectedAccount, ReportDetectionResult } from '@/lib/fileParser';
 import { computeRowConfidence } from '@/lib/confidenceScoring';
 import type { ScoredRow } from '@/lib/confidenceScoring';
+import { downloadTemplate, detectTemplateMatch, parseTemplateFile } from '@/lib/templateUtils';
 import { ColumnMappingDialog } from '@/components/workspace/ColumnMappingDialog';
 import { HierarchicalPreviewDialog } from '@/components/workspace/HierarchicalPreviewDialog';
 import { ReviewValidationDialog } from '@/components/workspace/ReviewValidationDialog';
@@ -52,6 +54,92 @@ export default function DataCenterPage() {
   const [reviewFileName, setReviewFileName] = useState('');
   const [reviewFileId, setReviewFileId] = useState('');
 
+  // ─── Template import (direct path) ──────────────────────────────
+
+  const handleTemplateImport = useCallback(async (file: globalThis.File, fileId: string) => {
+    if (!projectId) return;
+
+    setProcessingIds(prev => new Set(prev).add(fileId));
+    updateFileStatus(projectId, fileId, 'processing');
+
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
+      const headers = Object.keys(rows[0] || {});
+
+      const { isTemplate, mappedColumns } = detectTemplateMatch(headers);
+      if (!isTemplate) {
+        // Shouldn't happen since we checked before, but fallback
+        updateFileStatus(projectId, fileId, 'error');
+        toast.error('Template structure mismatch.');
+        return;
+      }
+
+      const { entries, errors } = parseTemplateFile(rows, mappedColumns);
+
+      if (errors.length > 0) {
+        toast.warning(`${errors.length} row(s) skipped due to validation errors.`, { duration: 5000 });
+      }
+
+      if (entries.length === 0) {
+        updateFileStatus(projectId, fileId, 'error');
+        toast.error('No valid entries found in template file.');
+        return;
+      }
+
+      // Direct import — skip confidence scoring for template files
+      const journalEntries = entries.map((e, idx) => ({
+        id: `e-${Date.now()}-${idx}`,
+        date: e.date,
+        reference: `JE-${String(idx + 1).padStart(3, '0')}`,
+        description: e.description,
+        accountCode: e.accountCode,
+        accountName: e.accountName,
+        debit: e.debit,
+        credit: e.credit,
+        isValidated: true,
+        source: file.name,
+      }));
+
+      const accountMap = new Map<string, string>();
+      for (const e of entries) {
+        if (e.accountCode && e.accountCode !== '') {
+          accountMap.set(e.accountCode, e.accountName);
+        }
+      }
+
+      const mappings = Array.from(accountMap.entries()).map(([code, name], idx) => ({
+        id: `m-${Date.now()}-${idx}`,
+        accountCode: code,
+        accountName: name,
+        suggestedCategory: '',
+        confirmedCategory: '',
+        type: 'asset' as const,
+        isMapped: false,
+      }));
+
+      updateFileStatus(projectId, fileId, 'processed', journalEntries.length);
+      addProjectEntries(projectId, journalEntries);
+      mergeProjectMappings(projectId, mappings);
+      learnAccountPatterns(projectId, Array.from(accountMap.entries()).map(([code, name]) => ({ code, name })));
+
+      toast.success(`Imported ${journalEntries.length} entries from template.`);
+    } catch (err) {
+      updateFileStatus(projectId, fileId, 'error');
+      toast.error(`Template import failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setProcessingIds(prev => {
+        const next = new Set(prev);
+        next.delete(fileId);
+        return next;
+      });
+    }
+  }, [projectId, updateFileStatus, addProjectEntries, mergeProjectMappings, learnAccountPatterns]);
+
+  // ─── AI parsing path ────────────────────────────────────────────
+
   const handleFiles = useCallback(async (fileList: FileList) => {
     if (!projectId) return;
 
@@ -73,9 +161,23 @@ export default function DataCenterPage() {
 
       if (type === 'xlsx' || type === 'csv') {
         try {
+          // ── Check for template match first ──
+          const buffer = await f.arrayBuffer();
+          const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const firstRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
+          const headers = Object.keys(firstRows[0] || {});
+          const { isTemplate } = detectTemplateMatch(headers);
+
+          if (isTemplate) {
+            toast.info(`Template format detected in ${f.name}. Importing directly…`);
+            await handleTemplateImport(f, fileId);
+            continue;
+          }
+
+          // ── Standard AI parsing path ──
           const preview = await previewFile(f);
 
-          // Handle report-style files with no extractable data
           if (preview.structureType === 'report' && preview.headers.length === 0) {
             updateFileStatus(projectId, fileId, 'error');
             setPendingFile({ fileId, rawFile: f, preview });
@@ -89,7 +191,7 @@ export default function DataCenterPage() {
             continue;
           }
 
-          // Save file fingerprint for future pattern matching
+          // Save fingerprint
           const fpType = preview.structureType === 'report' ? 'tabular' as const : preview.structureType;
           const fpId = generateFileFingerprint(preview.headers, fpType);
           saveFileFingerprint(projectId, {
@@ -100,9 +202,16 @@ export default function DataCenterPage() {
             lastUsed: Date.now(),
           });
 
-          // Report files with extracted data: show as tabular with a toast warning
           if (preview.structureType === 'report' && preview.reportInfo) {
             toast.info(`Report-style layout detected in ${f.name}. Data table was auto-extracted.`, { duration: 5000 });
+          }
+
+          // Low confidence warning with template suggestion
+          if (preview.confidence < 0.7 && preview.structureType !== 'report') {
+            toast.warning(
+              `Low detection confidence for ${f.name}. Consider using the Excel template for reliable import.`,
+              { duration: 7000 },
+            );
           }
 
           setPendingFile({ fileId, rawFile: f, preview });
@@ -113,7 +222,7 @@ export default function DataCenterPage() {
         }
       }
     }
-  }, [projectId, addFile, updateFileStatus, saveFileFingerprint]);
+  }, [projectId, addFile, updateFileStatus, saveFileFingerprint, handleTemplateImport]);
 
   /** Score rows and open review dialog */
   const openReviewDialog = (
@@ -138,7 +247,6 @@ export default function DataCenterPage() {
       };
     });
 
-    // If ALL rows are high confidence, skip review and import directly
     const allHigh = scored.every(r => r.confidence.level === 'high');
     if (allHigh && scored.length > 0) {
       finalizeImport(scored, [], fileId, fileName);
@@ -192,8 +300,6 @@ export default function DataCenterPage() {
     updateFileStatus(projectId, fileId, 'processed', entries.length);
     addProjectEntries(projectId, entries);
     mergeProjectMappings(projectId, mappings);
-
-    // Learn from this import
     learnAccountPatterns(projectId, Array.from(accountMap.entries()).map(([code, name]) => ({ code, name })));
     if (corrections.length > 0) {
       recordBatchCorrections(projectId, corrections);
@@ -202,7 +308,6 @@ export default function DataCenterPage() {
     toast.success(`Imported ${entries.length} entries from ${fileName}`);
   };
 
-  // Tabular mode: column mapping confirmed
   const handleMappingConfirm = async (mapping: ColumnMapping) => {
     if (!projectId || !pendingFile) return;
     const { fileId, rawFile } = pendingFile;
@@ -217,7 +322,6 @@ export default function DataCenterPage() {
         updateFileStatus(projectId, fileId, 'error');
         toast.error(`No valid entries found in ${rawFile.name}.`);
       } else {
-        // Route through confidence scoring + review
         openReviewDialog(result.entries, fileId, rawFile.name);
       }
     } catch (err) {
@@ -232,7 +336,6 @@ export default function DataCenterPage() {
     }
   };
 
-  // Hierarchical mode: user confirmed parsed transactions
   const handleHierarchicalConfirm = (
     transactions: HierarchicalTransaction[],
     accounts: DetectedAccount[],
@@ -246,7 +349,6 @@ export default function DataCenterPage() {
       updateFileStatus(projectId, fileId, 'error');
       toast.error(`No entries to import from ${rawFile.name}.`);
     } else {
-      // Route through confidence scoring + review
       openReviewDialog(result.entries, fileId, rawFile.name);
     }
   };
@@ -316,33 +418,87 @@ export default function DataCenterPage() {
     <div>
       <div className="page-header">
         <h1 className="page-title">Data Center</h1>
-        <p className="page-subtitle">Upload financial files — structure is auto-detected, scored, and validated</p>
+        <p className="page-subtitle">Upload financial files — use our template for best results, or let AI parse any format</p>
       </div>
 
+      {/* ─── Dual Import Mode Cards ─────────────────────────────── */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        {/* Mode 1: Template (recommended) */}
+        <div className="relative bg-card border-2 border-primary/30 rounded-xl p-6 flex flex-col">
+          <span className="absolute -top-2.5 left-4 bg-primary text-primary-foreground text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full">
+            Recommended
+          </span>
+          <div className="flex items-center gap-2 mb-2">
+            <ShieldCheck className="h-5 w-5 text-primary" />
+            <h3 className="font-semibold text-foreground">Upload Using Template</h3>
+          </div>
+          <p className="text-xs text-muted-foreground mb-4 flex-1">
+            Download our structured Excel template, fill in your data, and upload for reliable, error-free import.
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={downloadTemplate}>
+              <Download className="h-3.5 w-3.5 mr-1" />
+              Download Template
+            </Button>
+            <Button size="sm" onClick={() => {
+              const input = document.createElement('input');
+              input.type = 'file';
+              input.accept = '.xlsx,.xls,.csv';
+              input.onchange = (e) => {
+                const f = (e.target as HTMLInputElement).files;
+                if (f) handleFiles(f);
+              };
+              input.click();
+            }}>
+              Upload Template File
+            </Button>
+          </div>
+        </div>
+
+        {/* Mode 2: Any file (AI) */}
+        <div className="bg-card border border-border rounded-xl p-6 flex flex-col">
+          <div className="flex items-center gap-2 mb-2">
+            <Sparkles className="h-5 w-5 text-warning" />
+            <h3 className="font-semibold text-foreground">Upload Any File</h3>
+            <span className="text-[10px] font-medium uppercase tracking-wider text-warning bg-warning/10 px-1.5 py-0.5 rounded">Beta</span>
+          </div>
+          <p className="text-xs text-muted-foreground mb-4 flex-1">
+            Upload Excel or CSV in any format. AI will auto-detect structure, but results may require manual review.
+          </p>
+          <Button variant="outline" size="sm" className="self-start" onClick={() => {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.multiple = true;
+            input.accept = '.xlsx,.xls,.csv';
+            input.onchange = (e) => {
+              const f = (e.target as HTMLInputElement).files;
+              if (f) handleFiles(f);
+            };
+            input.click();
+          }}>
+            Browse Files
+          </Button>
+        </div>
+      </div>
+
+      {/* ─── Drag & Drop Zone ───────────────────────────────────── */}
       <div
-        className={`border-2 border-dashed rounded-xl p-12 text-center mb-6 transition-colors ${dragOver ? 'border-primary bg-primary/5' : 'border-border'}`}
+        className={`border-2 border-dashed rounded-xl p-8 text-center mb-6 transition-colors ${dragOver ? 'border-primary bg-primary/5' : 'border-border'}`}
         onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
       >
-        <Upload className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+        <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
         <p className="text-sm font-medium text-foreground mb-1">Drag & drop files here</p>
-        <p className="text-xs text-muted-foreground mb-4">Excel (.xlsx, .xls) and CSV — tabular and hierarchical formats supported</p>
-        <Button variant="outline" size="sm" onClick={() => {
-          const input = document.createElement('input');
-          input.type = 'file';
-          input.multiple = true;
-          input.accept = '.pdf,.xlsx,.xls,.csv';
-          input.onchange = (e) => {
-            const f = (e.target as HTMLInputElement).files;
-            if (f) handleFiles(f);
-          };
-          input.click();
-        }}>
-          Browse Files
-        </Button>
+        <p className="text-xs text-muted-foreground">
+          Excel (.xlsx, .xls) and CSV — template files are imported directly, other formats use AI parsing
+        </p>
+        <p className="text-xs text-primary mt-2 font-medium">
+          💡 Tip: Use our template for best results
+        </p>
       </div>
 
+      {/* ─── File Table ─────────────────────────────────────────── */}
       {files.length > 0 && (
         <div className="bg-card border border-border rounded-xl overflow-hidden">
           <table className="data-table">
@@ -446,18 +602,22 @@ export default function DataCenterPage() {
                   </ul>
                 </div>
               )}
-              <div className="bg-muted/50 rounded-lg p-3 text-sm text-muted-foreground">
-                <p className="font-medium mb-1">Suggestions:</p>
-                <ul className="list-disc list-inside space-y-1">
-                  <li>Export the data as a structured table from your accounting software</li>
-                  <li>Use CSV or plain Excel format without visual formatting</li>
-                  <li>Remove merged cells, titles, and banners before uploading</li>
-                </ul>
+              <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 text-sm">
+                <p className="font-medium text-foreground mb-1 flex items-center gap-1.5">
+                  <ShieldCheck className="h-4 w-4 text-primary" />
+                  Use our Excel template
+                </p>
+                <p className="text-muted-foreground mb-2">
+                  Download the structured template, paste your data, and re-upload for a reliable import.
+                </p>
+                <Button variant="outline" size="sm" onClick={downloadTemplate}>
+                  <Download className="h-3.5 w-3.5 mr-1" />
+                  Download Template
+                </Button>
               </div>
             </div>
             <DialogFooter className="gap-2">
               <Button variant="outline" onClick={() => {
-                // Try forcing tabular mapping anyway
                 if (pendingFile.preview.headers.length > 0) {
                   setDialogMode('tabular');
                 } else {
