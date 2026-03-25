@@ -5,9 +5,10 @@ import { useProjectStore } from '@/store/useProjectStore';
 import { useProjectFiles } from '@/hooks/useStableStoreSelectors';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Button } from '@/components/ui/button';
-import { previewFile, parseFileWithMapping } from '@/lib/fileParser';
-import type { PreviewData, ColumnMapping } from '@/lib/fileParser';
+import { previewFile, parseFileWithMapping, hierarchicalToParseResult } from '@/lib/fileParser';
+import type { PreviewData, ColumnMapping, HierarchicalTransaction, DetectedAccount } from '@/lib/fileParser';
 import { ColumnMappingDialog } from '@/components/workspace/ColumnMappingDialog';
+import { HierarchicalPreviewDialog } from '@/components/workspace/HierarchicalPreviewDialog';
 import { toast } from 'sonner';
 import type { UploadedFile } from '@/types/finance';
 
@@ -29,7 +30,10 @@ export default function DataCenterPage() {
   const [dragOver, setDragOver] = useState(false);
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
   const [rawFiles, setRawFiles] = useState<Map<string, globalThis.File>>(new Map());
+
+  // Dual-mode state
   const [pendingFile, setPendingFile] = useState<PendingFile | null>(null);
+  const [dialogMode, setDialogMode] = useState<'tabular' | 'hierarchical' | null>(null);
 
   const handleFiles = useCallback(async (fileList: FileList) => {
     if (!projectId) return;
@@ -59,6 +63,8 @@ export default function DataCenterPage() {
             continue;
           }
           setPendingFile({ fileId, rawFile: f, preview });
+          // Route to the right dialog based on detected structure
+          setDialogMode(preview.structureType);
         } catch (err) {
           updateFileStatus(projectId, fileId, 'error');
           toast.error(`Failed to read ${f.name}: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -67,10 +73,11 @@ export default function DataCenterPage() {
     }
   }, [projectId, addFile, updateFileStatus]);
 
+  // Tabular mode: column mapping confirmed
   const handleMappingConfirm = async (mapping: ColumnMapping) => {
     if (!projectId || !pendingFile) return;
     const { fileId, rawFile } = pendingFile;
-    setPendingFile(null);
+    closePending();
 
     setProcessingIds(prev => new Set(prev).add(fileId));
     updateFileStatus(projectId, fileId, 'processing');
@@ -98,6 +105,37 @@ export default function DataCenterPage() {
     }
   };
 
+  // Hierarchical mode: user confirmed parsed transactions
+  const handleHierarchicalConfirm = (
+    transactions: HierarchicalTransaction[],
+    accounts: DetectedAccount[],
+  ) => {
+    if (!projectId || !pendingFile) return;
+    const { fileId, rawFile } = pendingFile;
+    closePending();
+
+    const result = hierarchicalToParseResult(transactions, accounts, rawFile.name);
+    if (result.entries.length === 0) {
+      updateFileStatus(projectId, fileId, 'error');
+      toast.error(`No entries to import from ${rawFile.name}.`);
+    } else {
+      updateFileStatus(projectId, fileId, 'processed', result.entriesExtracted);
+      addProjectEntries(projectId, result.entries);
+      mergeProjectMappings(projectId, result.mappings);
+      toast.success(`Imported ${result.entriesExtracted} entries and ${result.mappings.length} accounts from ${rawFile.name}`);
+    }
+  };
+
+  // Switch from hierarchical to manual column mapping
+  const handleFallbackToMapping = () => {
+    setDialogMode('tabular');
+  };
+
+  const closePending = () => {
+    setPendingFile(null);
+    setDialogMode(null);
+  };
+
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
@@ -118,6 +156,7 @@ export default function DataCenterPage() {
         return;
       }
       setPendingFile({ fileId, rawFile: raw, preview });
+      setDialogMode(preview.structureType);
     } catch {
       toast.error('Failed to read file.');
     }
@@ -143,7 +182,7 @@ export default function DataCenterPage() {
     <div>
       <div className="page-header">
         <h1 className="page-title">Data Center</h1>
-        <p className="page-subtitle">Upload financial files — you'll map columns before processing</p>
+        <p className="page-subtitle">Upload financial files — structure is auto-detected for you</p>
       </div>
 
       <div
@@ -154,7 +193,7 @@ export default function DataCenterPage() {
       >
         <Upload className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
         <p className="text-sm font-medium text-foreground mb-1">Drag & drop files here</p>
-        <p className="text-xs text-muted-foreground mb-4">Excel (.xlsx, .xls) and CSV — you'll confirm column mapping before import</p>
+        <p className="text-xs text-muted-foreground mb-4">Excel (.xlsx, .xls) and CSV — tabular and hierarchical formats supported</p>
         <Button variant="outline" size="sm" onClick={() => {
           const input = document.createElement('input');
           input.type = 'file';
@@ -220,12 +259,25 @@ export default function DataCenterPage() {
         </div>
       )}
 
-      {pendingFile && (
+      {/* Tabular mode: Column mapping dialog */}
+      {pendingFile && dialogMode === 'tabular' && (
         <ColumnMappingDialog
-          open={!!pendingFile}
-          onOpenChange={(open) => { if (!open) setPendingFile(null); }}
+          open
+          onOpenChange={(open) => { if (!open) closePending(); }}
           preview={pendingFile.preview}
           onConfirm={handleMappingConfirm}
+        />
+      )}
+
+      {/* Hierarchical mode: Structure preview dialog */}
+      {pendingFile && dialogMode === 'hierarchical' && pendingFile.preview.hierarchicalResult && (
+        <HierarchicalPreviewDialog
+          open
+          onOpenChange={(open) => { if (!open) closePending(); }}
+          result={pendingFile.preview.hierarchicalResult}
+          fileName={pendingFile.preview.fileName}
+          onConfirm={handleHierarchicalConfirm}
+          onFallbackToMapping={handleFallbackToMapping}
         />
       )}
     </div>
