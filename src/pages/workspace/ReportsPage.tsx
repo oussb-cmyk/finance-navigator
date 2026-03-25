@@ -1,13 +1,14 @@
 import { useParams } from 'react-router-dom';
 import { useProjectStore } from '@/store/useProjectStore';
+import { useProjectFiles, useProjectEntries, useProjectMappings } from '@/hooks/useStableStoreSelectors';
 import { FileText, CheckCircle, AlertTriangle, Clock } from 'lucide-react';
 
 export default function ReportsPage() {
   const { projectId } = useParams();
   const pid = projectId || '';
-  const entries = useProjectStore((s) => s.entries[pid] ?? []);
-  const files = useProjectStore((s) => s.files[pid] ?? []);
-  const mappings = useProjectStore((s) => s.mappings[pid] ?? []);
+  const entries = useProjectEntries(pid);
+  const files = useProjectFiles(pid);
+  const mappings = useProjectMappings(pid);
 
   const validated = entries.filter(e => e.isValidated).length;
   const unmapped = mappings.filter(m => !m.isMapped).length;

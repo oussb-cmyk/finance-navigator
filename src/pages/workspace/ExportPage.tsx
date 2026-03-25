@@ -1,12 +1,13 @@
 import { useParams } from 'react-router-dom';
 import { useProjectStore } from '@/store/useProjectStore';
+import { useProjectEntries } from '@/hooks/useStableStoreSelectors';
 import { Button } from '@/components/ui/button';
 import { Download, FileSpreadsheet, FileText } from 'lucide-react';
 
 export default function ExportPage() {
   const { projectId } = useParams();
   const pid = projectId || '';
-  const entries = useProjectStore((s) => s.entries[pid] ?? []);
+  const entries = useProjectEntries(pid);
   const project = useProjectStore((s) => s.projects.find(p => p.id === projectId));
 
   const exportCSV = (type: string) => {

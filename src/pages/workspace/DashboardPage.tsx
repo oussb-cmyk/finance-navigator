@@ -1,5 +1,5 @@
 import { useParams } from 'react-router-dom';
-import { useProjectStore } from '@/store/useProjectStore';
+import { useProjectEntries } from '@/hooks/useStableStoreSelectors';
 import { KPICard } from '@/components/shared/KPICard';
 import { DollarSign, TrendingDown, TrendingUp, Percent } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
@@ -8,8 +8,7 @@ const COLORS = ['hsl(173,58%,39%)', 'hsl(210,92%,45%)', 'hsl(38,92%,50%)', 'hsl(
 
 export default function DashboardPage() {
   const { projectId } = useParams();
-  const pid = projectId || '';
-  const entries = useProjectStore((s) => s.entries[pid] ?? []);
+  const entries = useProjectEntries(projectId || '');
 
   const sumByPrefix = (prefixes: string[], field: 'debit' | 'credit') =>
     entries.filter(e => prefixes.some(p => e.accountCode.startsWith(p))).reduce((s, e) => s + e[field], 0);
