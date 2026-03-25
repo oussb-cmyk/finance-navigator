@@ -658,6 +658,60 @@ export default function DataCenterPage() {
           onConfirm={handleReviewConfirm}
         />
       )}
+
+      {/* Template validation errors dialog */}
+      {templateErrorDialogOpen && templateErrors.length > 0 && (
+        <Dialog open onOpenChange={(open) => { if (!open) { setTemplateErrorDialogOpen(false); setTemplateErrors([]); setTemplateValidationResult(null); } }}>
+          <DialogContent className="sm:max-w-lg max-h-[80vh]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <XCircle className="h-5 w-5 text-destructive" />
+                Import Blocked — {templateErrors.length} Error{templateErrors.length > 1 ? 's' : ''} Found
+              </DialogTitle>
+              <DialogDescription>
+                Fix the following errors in <span className="font-medium">{templateErrorFileName}</span> and re-upload.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              {templateValidationResult && (
+                <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                  <span>{templateValidationResult.totalRows} data row{templateValidationResult.totalRows !== 1 ? 's' : ''} scanned</span>
+                  <span className="text-destructive font-medium">{templateErrors.length} error{templateErrors.length > 1 ? 's' : ''}</span>
+                  {templateValidationResult.skippedEmpty > 0 && (
+                    <span>{templateValidationResult.skippedEmpty} empty row{templateValidationResult.skippedEmpty !== 1 ? 's' : ''} skipped</span>
+                  )}
+                </div>
+              )}
+              <div className="max-h-60 overflow-y-auto border border-border rounded-lg divide-y divide-border">
+                {templateErrors.map((err, i) => (
+                  <div key={i} className="flex items-start gap-2 px-3 py-2 text-sm">
+                    <span className="text-destructive font-mono text-xs shrink-0 mt-0.5">Row {err.row}</span>
+                    <span className="text-muted-foreground">·</span>
+                    <span className="text-muted-foreground text-xs font-medium shrink-0">{err.field}</span>
+                    <span className="text-foreground text-xs">{err.message}</span>
+                  </div>
+                ))}
+              </div>
+              <Alert>
+                <CheckCircle2 className="h-4 w-4" />
+                <AlertTitle>How to fix</AlertTitle>
+                <AlertDescription className="text-xs">
+                  Open your file, correct the highlighted rows, and re-upload. All dates must be valid (YYYY-MM-DD or DD/MM/YYYY), amounts must be numeric, and every row needs an account number with at least one non-zero debit or credit.
+                </AlertDescription>
+              </Alert>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" size="sm" onClick={downloadTemplate}>
+                <Download className="h-3.5 w-3.5 mr-1" />
+                Download Template
+              </Button>
+              <Button variant="default" onClick={() => { setTemplateErrorDialogOpen(false); setTemplateErrors([]); setTemplateValidationResult(null); }}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
