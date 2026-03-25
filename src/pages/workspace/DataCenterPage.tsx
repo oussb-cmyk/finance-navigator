@@ -442,29 +442,32 @@ export default function DataCenterPage() {
           </span>
           <div className="flex items-center gap-2 mb-2">
             <ShieldCheck className="h-5 w-5 text-primary" />
-            <h3 className="font-semibold text-foreground">Upload Using Template</h3>
+            <h3 className="font-semibold text-foreground">Upload Your Data (Recommended)</h3>
           </div>
           <p className="text-xs text-muted-foreground mb-1 flex-1">
-            Download our structured Excel template, fill in your data, and upload for guaranteed accurate import.
+            Use our template for accurate and reliable data import
           </p>
           <p className="text-[10px] text-primary font-medium mb-3">✓ This method guarantees 100% accurate import — no AI, no guessing</p>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={downloadTemplate}>
-              <Download className="h-3.5 w-3.5 mr-1" />
-              Download Template
-            </Button>
-            <Button size="sm" onClick={() => {
-              const input = document.createElement('input');
-              input.type = 'file';
-              input.accept = '.xlsx,.xls,.csv';
-              input.onchange = (e) => {
-                const f = (e.target as HTMLInputElement).files;
-                if (f) handleFiles(f);
-              };
-              input.click();
-            }}>
-              Upload Template File
-            </Button>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={downloadTemplate}>
+                <Download className="h-3.5 w-3.5 mr-1" />
+                Download Template
+              </Button>
+              <Button size="sm" onClick={() => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.xlsx,.xls,.csv';
+                input.onchange = (e) => {
+                  const f = (e.target as HTMLInputElement).files;
+                  if (f) handleFiles(f);
+                };
+                input.click();
+              }}>
+                Upload Data
+              </Button>
+            </div>
+            <p className="text-[10px] text-muted-foreground">Make sure your file follows the template format</p>
           </div>
         </div>
 
