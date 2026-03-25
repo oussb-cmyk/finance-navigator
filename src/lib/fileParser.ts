@@ -884,35 +884,42 @@ export async function previewFile(file: File): Promise<PreviewData> {
   const sheet = workbook.Sheets[sheetName];
   const rawRows: RawRow[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 
-  if (!rawRows.length) return {
+  const emptyResult: PreviewData = {
     headers: [], rows: [], suggestedMapping: autoDetectColumns([]),
     fileName: file.name, confidence: 0, detectedAccounts: [], isHierarchical: false,
-    structureType: 'tabular', hierarchicalResult: null,
+    structureType: 'tabular', hierarchicalResult: null, reportInfo: null,
   };
 
-  // Pre-clean: normalize, find true header, remove artifacts
-  const { headers, rows: cleanedRows } = preCleanData(rawRows);
+  if (!rawRows.length) return emptyResult;
+
+  // Pre-clean: normalize, find true header, detect report layout, remove artifacts
+  const { headers, rows: cleanedRows, reportInfo } = preCleanData(rawRows);
 
   if (headers.length === 0 || cleanedRows.length === 0) {
-    return {
-      headers: [], rows: [], suggestedMapping: autoDetectColumns([]),
-      fileName: file.name, confidence: 0, detectedAccounts: [], isHierarchical: false,
-      structureType: 'tabular', hierarchicalResult: null,
-    };
+    // If report was detected but table extraction failed, return report info for UI feedback
+    if (reportInfo?.isReport) {
+      return { ...emptyResult, reportInfo, structureType: 'report' };
+    }
+    return emptyResult;
   }
 
   const suggestedMapping = autoDetectColumns(headers);
-  const { type: structureType, confidence: structConfidence } = detectFileStructure(cleanedRows, headers);
+  const { type: detectedType, confidence: structConfidence } = detectFileStructure(cleanedRows, headers);
+
+  // If report was detected AND table was successfully extracted, treat as the detected sub-type
+  const structureType: FileStructureType = reportInfo?.isReport && detectedType === 'tabular'
+    ? (structConfidence < 0.4 ? 'report' : detectedType)
+    : detectedType;
 
   let hierarchicalResult: HierarchicalParseResult | null = null;
   let detectedAccounts: DetectedAccount[] = [];
 
-  if (structureType === 'hierarchical') {
+  if (structureType === 'hierarchical' || (reportInfo?.isReport && detectedType === 'hierarchical')) {
     hierarchicalResult = parseHierarchical(cleanedRows);
     detectedAccounts = hierarchicalResult.accounts;
   }
 
-  const confidence = structureType === 'tabular'
+  const confidence = structureType === 'tabular' || structureType === 'report'
     ? computeConfidence(suggestedMapping, cleanedRows)
     : structConfidence;
 
@@ -928,6 +935,7 @@ export async function previewFile(file: File): Promise<PreviewData> {
     isHierarchical: structureType === 'hierarchical',
     structureType,
     hierarchicalResult,
+    reportInfo,
   };
 }
 
