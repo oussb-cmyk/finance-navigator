@@ -444,9 +444,10 @@ export default function DataCenterPage() {
             <ShieldCheck className="h-5 w-5 text-primary" />
             <h3 className="font-semibold text-foreground">Upload Using Template</h3>
           </div>
-          <p className="text-xs text-muted-foreground mb-4 flex-1">
-            Download our structured Excel template, fill in your data, and upload for reliable, error-free import.
+          <p className="text-xs text-muted-foreground mb-1 flex-1">
+            Download our structured Excel template, fill in your data, and upload for guaranteed accurate import.
           </p>
+          <p className="text-[10px] text-primary font-medium mb-3">✓ This method guarantees 100% accurate import — no AI, no guessing</p>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={downloadTemplate}>
               <Download className="h-3.5 w-3.5 mr-1" />
