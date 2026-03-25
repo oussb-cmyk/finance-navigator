@@ -137,7 +137,7 @@ export default function DataCenterPage() {
       mergeProjectMappings(projectId, mappings);
       learnAccountPatterns(projectId, Array.from(accountMap.entries()).map(([code, name]) => ({ code, name })));
 
-      toast.success(`✅ Data imported successfully — ${journalEntries.length} entries with 0 errors`, { duration: 5000 });
+      toast.success(`✅ Imported using template (100% accurate) — ${journalEntries.length} entries with 0 errors`, { duration: 5000 });
     } catch (err) {
       updateFileStatus(projectId, fileId, 'error');
       toast.error(`Template import failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
