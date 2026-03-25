@@ -45,7 +45,7 @@ export default function DataCenterPage() {
   const [rawFiles, setRawFiles] = useState<Map<string, globalThis.File>>(new Map());
 
   const [pendingFile, setPendingFile] = useState<PendingFile | null>(null);
-  const [dialogMode, setDialogMode] = useState<'tabular' | 'hierarchical' | null>(null);
+  const [dialogMode, setDialogMode] = useState<'tabular' | 'hierarchical' | 'report' | null>(null);
 
   // Review dialog state
   const [reviewRows, setReviewRows] = useState<ScoredRow[] | null>(null);
