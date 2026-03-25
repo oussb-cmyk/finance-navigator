@@ -12,7 +12,8 @@ import { previewFile, parseFileWithMapping, hierarchicalToParseResult } from '@/
 import type { PreviewData, ColumnMapping, HierarchicalTransaction, DetectedAccount, ReportDetectionResult } from '@/lib/fileParser';
 import { computeRowConfidence } from '@/lib/confidenceScoring';
 import type { ScoredRow } from '@/lib/confidenceScoring';
-import { downloadTemplate, detectTemplateMatch, parseTemplateFile } from '@/lib/templateUtils';
+import { downloadTemplate, detectTemplateMatch, validateAndParseTemplate } from '@/lib/templateUtils';
+import type { TemplateRowError, TemplateValidationResult } from '@/lib/templateUtils';
 import { ColumnMappingDialog } from '@/components/workspace/ColumnMappingDialog';
 import { HierarchicalPreviewDialog } from '@/components/workspace/HierarchicalPreviewDialog';
 import { ReviewValidationDialog } from '@/components/workspace/ReviewValidationDialog';
