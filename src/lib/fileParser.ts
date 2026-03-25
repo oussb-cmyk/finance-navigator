@@ -846,6 +846,7 @@ export interface PreviewData {
   isHierarchical: boolean;
   structureType: FileStructureType;
   hierarchicalResult: HierarchicalParseResult | null;
+  reportInfo: ReportDetectionResult | null;
 }
 
 export interface ParseResult {
