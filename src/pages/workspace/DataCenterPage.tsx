@@ -280,12 +280,17 @@ export default function DataCenterPage() {
     }
     try {
       const preview = await previewFile(raw);
+      if (preview.structureType === 'report' && preview.headers.length === 0) {
+        setPendingFile({ fileId, rawFile: raw, preview });
+        setDialogMode('report');
+        return;
+      }
       if (preview.headers.length === 0) {
         toast.error('No data found in file.');
         return;
       }
       setPendingFile({ fileId, rawFile: raw, preview });
-      setDialogMode(preview.structureType);
+      setDialogMode(preview.structureType === 'report' ? 'tabular' : preview.structureType);
     } catch {
       toast.error('Failed to read file.');
     }
