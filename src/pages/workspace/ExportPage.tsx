@@ -5,7 +5,8 @@ import { Download, FileSpreadsheet, FileText } from 'lucide-react';
 
 export default function ExportPage() {
   const { projectId } = useParams();
-  const entries = useProjectStore((s) => s.getProjectEntries(projectId || ''));
+  const pid = projectId || '';
+  const entries = useProjectStore((s) => s.entries[pid] ?? []);
   const project = useProjectStore((s) => s.projects.find(p => p.id === projectId));
 
   const exportCSV = (type: string) => {

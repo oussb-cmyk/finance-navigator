@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RefreshCw } from 'lucide-react';
 
 function useFinancials(projectId: string) {
-  const entries = useProjectStore((s) => s.getProjectEntries(projectId));
+  const entries = useProjectStore((s) => s.entries[projectId] ?? []);
 
   const sumByPrefix = (prefixes: string[], field: 'debit' | 'credit') =>
     entries.filter(e => prefixes.some(p => e.accountCode.startsWith(p))).reduce((s, e) => s + e[field], 0);

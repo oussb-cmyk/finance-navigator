@@ -4,9 +4,10 @@ import { FileText, CheckCircle, AlertTriangle, Clock } from 'lucide-react';
 
 export default function ReportsPage() {
   const { projectId } = useParams();
-  const entries = useProjectStore((s) => s.getProjectEntries(projectId || ''));
-  const files = useProjectStore((s) => s.getProjectFiles(projectId || ''));
-  const mappings = useProjectStore((s) => s.getProjectMappings(projectId || ''));
+  const pid = projectId || '';
+  const entries = useProjectStore((s) => s.entries[pid] ?? []);
+  const files = useProjectStore((s) => s.files[pid] ?? []);
+  const mappings = useProjectStore((s) => s.mappings[pid] ?? []);
 
   const validated = entries.filter(e => e.isValidated).length;
   const unmapped = mappings.filter(m => !m.isMapped).length;

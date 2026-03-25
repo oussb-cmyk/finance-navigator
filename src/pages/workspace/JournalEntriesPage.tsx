@@ -10,7 +10,8 @@ import type { JournalEntry } from '@/types/finance';
 
 export default function JournalEntriesPage() {
   const { projectId } = useParams();
-  const entries = useProjectStore((s) => s.getProjectEntries(projectId || ''));
+  const pid = projectId || '';
+  const entries = useProjectStore((s) => s.entries[pid] ?? []);
   const { addEntry, deleteEntry, toggleEntryValidation, validateAllEntries } = useProjectStore();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ date: '', reference: '', description: '', accountCode: '', accountName: '', debit: '', credit: '' });

@@ -6,10 +6,11 @@ import { FileText, BookOpen, GitBranch, CheckCircle, DollarSign, TrendingUp, Bar
 
 export default function OverviewPage() {
   const { projectId } = useParams();
+  const pid = projectId || '';
   const project = useProjectStore((s) => s.projects.find((p) => p.id === projectId));
-  const files = useProjectStore((s) => s.getProjectFiles(projectId || ''));
-  const entries = useProjectStore((s) => s.getProjectEntries(projectId || ''));
-  const mappings = useProjectStore((s) => s.getProjectMappings(projectId || ''));
+  const files = useProjectStore((s) => s.files[pid] ?? []);
+  const entries = useProjectStore((s) => s.entries[pid] ?? []);
+  const mappings = useProjectStore((s) => s.mappings[pid] ?? []);
 
   if (!project) return <div className="text-muted-foreground">Project not found</div>;
 
