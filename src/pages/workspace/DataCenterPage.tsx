@@ -415,6 +415,66 @@ export default function DataCenterPage() {
         />
       )}
 
+      {/* Report-style file warning dialog */}
+      {pendingFile && dialogMode === 'report' && (
+        <Dialog open onOpenChange={(open) => { if (!open) closePending(); }}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-warning" />
+                Report-Style File Detected
+              </DialogTitle>
+              <DialogDescription>
+                This file appears to be a formatted report, not a data export.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Unable to extract structured data</AlertTitle>
+                <AlertDescription>
+                  The file contains visual formatting (titles, merged cells, inconsistent columns) that prevents reliable data extraction.
+                </AlertDescription>
+              </Alert>
+              {pendingFile.preview.reportInfo && pendingFile.preview.reportInfo.reasons.length > 0 && (
+                <div className="bg-muted rounded-lg p-3 text-sm space-y-1">
+                  <p className="font-medium text-muted-foreground">Detection details:</p>
+                  <ul className="list-disc list-inside text-muted-foreground">
+                    {pendingFile.preview.reportInfo.reasons.map((r, i) => (
+                      <li key={i}>{r}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <div className="bg-muted/50 rounded-lg p-3 text-sm text-muted-foreground">
+                <p className="font-medium mb-1">Suggestions:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>Export the data as a structured table from your accounting software</li>
+                  <li>Use CSV or plain Excel format without visual formatting</li>
+                  <li>Remove merged cells, titles, and banners before uploading</li>
+                </ul>
+              </div>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => {
+                // Try forcing tabular mapping anyway
+                if (pendingFile.preview.headers.length > 0) {
+                  setDialogMode('tabular');
+                } else {
+                  closePending();
+                  toast.error('No columns could be detected. Please upload a structured export.');
+                }
+              }}>
+                Try Manual Mapping
+              </Button>
+              <Button variant="default" onClick={closePending}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
       {/* Review & Validation dialog */}
       {reviewRows && (
         <ReviewValidationDialog
