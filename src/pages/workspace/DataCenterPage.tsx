@@ -137,7 +137,7 @@ export default function DataCenterPage() {
       mergeProjectMappings(projectId, mappings);
       learnAccountPatterns(projectId, Array.from(accountMap.entries()).map(([code, name]) => ({ code, name })));
 
-      toast.success(`✅ Data imported successfully — ${journalEntries.length} entries with 0 errors`, { duration: 5000 });
+      toast.success(`✅ Imported using template (100% accurate) — ${journalEntries.length} entries with 0 errors`, { duration: 5000 });
     } catch (err) {
       updateFileStatus(projectId, fileId, 'error');
       toast.error(`Template import failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -150,7 +150,54 @@ export default function DataCenterPage() {
     }
   }, [projectId, updateFileStatus, addProjectEntries, mergeProjectMappings, learnAccountPatterns]);
 
-  // ─── AI parsing path ────────────────────────────────────────────
+  // ─── Template-only upload (deterministic, no AI) ─────────────────
+
+  const handleTemplateUpload = useCallback(async (fileList: FileList) => {
+    if (!projectId) return;
+
+    for (const f of Array.from(fileList)) {
+      const ext = f.name.split('.').pop()?.toLowerCase();
+      const type = ext === 'pdf' ? 'pdf' : ext === 'csv' ? 'csv' : 'xlsx';
+      const fileId = `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const newFile: UploadedFile = {
+        id: fileId,
+        name: f.name,
+        type,
+        size: f.size,
+        uploadedAt: new Date().toISOString().slice(0, 10),
+        status: 'raw',
+        entriesExtracted: 0,
+      };
+      addFile(projectId, newFile);
+      setRawFiles(prev => new Map(prev).set(fileId, f));
+
+      // Strict template check — reject if not matching
+      try {
+        const buffer = await f.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const firstRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
+        const headers = Object.keys(firstRows[0] || {});
+        const { isTemplate } = detectTemplateMatch(headers);
+
+        if (!isTemplate) {
+          updateFileStatus(projectId, fileId, 'error');
+          toast.error(
+            `"${f.name}" does not match template format. Please use the template or upload via "Upload Any File".`,
+            { duration: 7000 },
+          );
+          continue;
+        }
+
+        await handleTemplateImport(f, fileId);
+      } catch (err) {
+        updateFileStatus(projectId, fileId, 'error');
+        toast.error(`Failed to read ${f.name}: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      }
+    }
+  }, [projectId, addFile, updateFileStatus, handleTemplateImport]);
+
+  // ─── AI parsing path (any file, no template shortcut) ───────────
 
   const handleFiles = useCallback(async (fileList: FileList) => {
     if (!projectId) return;
@@ -173,21 +220,6 @@ export default function DataCenterPage() {
 
       if (type === 'xlsx' || type === 'csv') {
         try {
-          // ── Check for template match first ──
-          const buffer = await f.arrayBuffer();
-          const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
-          const sheet = workbook.Sheets[workbook.SheetNames[0]];
-          const firstRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
-          const headers = Object.keys(firstRows[0] || {});
-          const { isTemplate } = detectTemplateMatch(headers);
-
-          if (isTemplate) {
-            toast.info(`Template format detected in ${f.name}. Importing directly…`);
-            await handleTemplateImport(f, fileId);
-            continue;
-          }
-
-          // ── Standard AI parsing path ──
           const preview = await previewFile(f);
 
           if (preview.structureType === 'report' && preview.headers.length === 0) {
@@ -226,6 +258,8 @@ export default function DataCenterPage() {
             );
           }
 
+          toast.info(`AI parsing applied to "${f.name}" — please review the results`, { duration: 5000 });
+
           setPendingFile({ fileId, rawFile: f, preview });
           setDialogMode(preview.structureType === 'report' ? 'tabular' : preview.structureType);
         } catch (err) {
@@ -234,7 +268,7 @@ export default function DataCenterPage() {
         }
       }
     }
-  }, [projectId, addFile, updateFileStatus, saveFileFingerprint, handleTemplateImport]);
+  }, [projectId, addFile, updateFileStatus, saveFileFingerprint]);
 
   /** Score rows and open review dialog */
   const openReviewDialog = (
@@ -460,7 +494,7 @@ export default function DataCenterPage() {
                 input.accept = '.xlsx,.xls,.csv';
                 input.onchange = (e) => {
                   const f = (e.target as HTMLInputElement).files;
-                  if (f) handleFiles(f);
+                  if (f) handleTemplateUpload(f);
                 };
                 input.click();
               }}>
