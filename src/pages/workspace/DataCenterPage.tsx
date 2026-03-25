@@ -134,22 +134,7 @@ export default function DataCenterPage() {
 
       const result = validateAndParseTemplate(rows, mappedColumns);
 
-      if (!result.valid) {
-        updateFileStatus(projectId, fileId, 'error');
-        setTemplateErrors(result.errors);
-        setTemplateValidationResult(result);
-        setTemplateErrorFileName(file.name);
-        setTemplateErrorDialogOpen(true);
-        return;
-      }
-
-      if (result.entries.length === 0) {
-        updateFileStatus(projectId, fileId, 'error');
-        toast.error('No valid entries found in template file.');
-        return;
-      }
-
-      // Open mandatory preview instead of direct import
+      // Build import rows from all parsed entries (valid or not)
       const importRows: ImportRow[] = result.entries.map(e => ({
         date: e.date,
         accountCode: e.accountCode,
@@ -159,6 +144,13 @@ export default function DataCenterPage() {
         credit: e.credit,
       }));
 
+      if (importRows.length === 0) {
+        updateFileStatus(projectId, fileId, 'error');
+        toast.error('No entries found in template file.');
+        return;
+      }
+
+      // Always open preview — no hard block
       setPreviewData({ rows: importRows, fileName: file.name, fileId, mode: 'template' });
     } catch (err) {
       updateFileStatus(projectId, fileId, 'error');
