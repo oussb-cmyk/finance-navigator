@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { Upload, FileText, FileSpreadsheet, File, Trash2, RefreshCw, Loader2, AlertTriangle, Download, ShieldCheck, Sparkles } from 'lucide-react';
+import { Upload, FileText, FileSpreadsheet, File, Trash2, RefreshCw, Loader2, AlertTriangle, Download, ShieldCheck, Sparkles, CheckCircle2, XCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useProjectStore } from '@/store/useProjectStore';
 import { useLearningStore, generateFileFingerprint } from '@/store/useLearningStore';
@@ -12,7 +12,8 @@ import { previewFile, parseFileWithMapping, hierarchicalToParseResult } from '@/
 import type { PreviewData, ColumnMapping, HierarchicalTransaction, DetectedAccount, ReportDetectionResult } from '@/lib/fileParser';
 import { computeRowConfidence } from '@/lib/confidenceScoring';
 import type { ScoredRow } from '@/lib/confidenceScoring';
-import { downloadTemplate, detectTemplateMatch, parseTemplateFile } from '@/lib/templateUtils';
+import { downloadTemplate, detectTemplateMatch, validateAndParseTemplate } from '@/lib/templateUtils';
+import type { TemplateRowError, TemplateValidationResult } from '@/lib/templateUtils';
 import { ColumnMappingDialog } from '@/components/workspace/ColumnMappingDialog';
 import { HierarchicalPreviewDialog } from '@/components/workspace/HierarchicalPreviewDialog';
 import { ReviewValidationDialog } from '@/components/workspace/ReviewValidationDialog';
@@ -54,7 +55,13 @@ export default function DataCenterPage() {
   const [reviewFileName, setReviewFileName] = useState('');
   const [reviewFileId, setReviewFileId] = useState('');
 
-  // ─── Template import (direct path) ──────────────────────────────
+  // Template validation error state
+  const [templateErrors, setTemplateErrors] = useState<TemplateRowError[]>([]);
+  const [templateErrorDialogOpen, setTemplateErrorDialogOpen] = useState(false);
+  const [templateValidationResult, setTemplateValidationResult] = useState<TemplateValidationResult | null>(null);
+  const [templateErrorFileName, setTemplateErrorFileName] = useState('');
+
+  // ─── Template import (strict deterministic path) ───────────────
 
   const handleTemplateImport = useCallback(async (file: globalThis.File, fileId: string) => {
     if (!projectId) return;
@@ -71,26 +78,31 @@ export default function DataCenterPage() {
 
       const { isTemplate, mappedColumns } = detectTemplateMatch(headers);
       if (!isTemplate) {
-        // Shouldn't happen since we checked before, but fallback
         updateFileStatus(projectId, fileId, 'error');
-        toast.error('Template structure mismatch.');
+        toast.error('Template structure mismatch. Expected columns: Date, Account Number, Account Name, Description, Debit, Credit.');
         return;
       }
 
-      const { entries, errors } = parseTemplateFile(rows, mappedColumns);
+      const result = validateAndParseTemplate(rows, mappedColumns);
 
-      if (errors.length > 0) {
-        toast.warning(`${errors.length} row(s) skipped due to validation errors.`, { duration: 5000 });
+      // ── Block import if validation errors exist ──
+      if (!result.valid) {
+        updateFileStatus(projectId, fileId, 'error');
+        setTemplateErrors(result.errors);
+        setTemplateValidationResult(result);
+        setTemplateErrorFileName(file.name);
+        setTemplateErrorDialogOpen(true);
+        return;
       }
 
-      if (entries.length === 0) {
+      if (result.entries.length === 0) {
         updateFileStatus(projectId, fileId, 'error');
         toast.error('No valid entries found in template file.');
         return;
       }
 
-      // Direct import — skip confidence scoring for template files
-      const journalEntries = entries.map((e, idx) => ({
+      // Direct import — deterministic, no AI
+      const journalEntries = result.entries.map((e, idx) => ({
         id: `e-${Date.now()}-${idx}`,
         date: e.date,
         reference: `JE-${String(idx + 1).padStart(3, '0')}`,
@@ -104,7 +116,7 @@ export default function DataCenterPage() {
       }));
 
       const accountMap = new Map<string, string>();
-      for (const e of entries) {
+      for (const e of result.entries) {
         if (e.accountCode && e.accountCode !== '') {
           accountMap.set(e.accountCode, e.accountName);
         }
@@ -125,7 +137,7 @@ export default function DataCenterPage() {
       mergeProjectMappings(projectId, mappings);
       learnAccountPatterns(projectId, Array.from(accountMap.entries()).map(([code, name]) => ({ code, name })));
 
-      toast.success(`Imported ${journalEntries.length} entries from template.`);
+      toast.success(`✅ Data imported successfully — ${journalEntries.length} entries with 0 errors`, { duration: 5000 });
     } catch (err) {
       updateFileStatus(projectId, fileId, 'error');
       toast.error(`Template import failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -432,9 +444,10 @@ export default function DataCenterPage() {
             <ShieldCheck className="h-5 w-5 text-primary" />
             <h3 className="font-semibold text-foreground">Upload Using Template</h3>
           </div>
-          <p className="text-xs text-muted-foreground mb-4 flex-1">
-            Download our structured Excel template, fill in your data, and upload for reliable, error-free import.
+          <p className="text-xs text-muted-foreground mb-1 flex-1">
+            Download our structured Excel template, fill in your data, and upload for guaranteed accurate import.
           </p>
+          <p className="text-[10px] text-primary font-medium mb-3">✓ This method guarantees 100% accurate import — no AI, no guessing</p>
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={downloadTemplate}>
               <Download className="h-3.5 w-3.5 mr-1" />
@@ -644,6 +657,60 @@ export default function DataCenterPage() {
           fileName={reviewFileName}
           onConfirm={handleReviewConfirm}
         />
+      )}
+
+      {/* Template validation errors dialog */}
+      {templateErrorDialogOpen && templateErrors.length > 0 && (
+        <Dialog open onOpenChange={(open) => { if (!open) { setTemplateErrorDialogOpen(false); setTemplateErrors([]); setTemplateValidationResult(null); } }}>
+          <DialogContent className="sm:max-w-lg max-h-[80vh]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <XCircle className="h-5 w-5 text-destructive" />
+                Import Blocked — {templateErrors.length} Error{templateErrors.length > 1 ? 's' : ''} Found
+              </DialogTitle>
+              <DialogDescription>
+                Fix the following errors in <span className="font-medium">{templateErrorFileName}</span> and re-upload.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              {templateValidationResult && (
+                <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                  <span>{templateValidationResult.totalRows} data row{templateValidationResult.totalRows !== 1 ? 's' : ''} scanned</span>
+                  <span className="text-destructive font-medium">{templateErrors.length} error{templateErrors.length > 1 ? 's' : ''}</span>
+                  {templateValidationResult.skippedEmpty > 0 && (
+                    <span>{templateValidationResult.skippedEmpty} empty row{templateValidationResult.skippedEmpty !== 1 ? 's' : ''} skipped</span>
+                  )}
+                </div>
+              )}
+              <div className="max-h-60 overflow-y-auto border border-border rounded-lg divide-y divide-border">
+                {templateErrors.map((err, i) => (
+                  <div key={i} className="flex items-start gap-2 px-3 py-2 text-sm">
+                    <span className="text-destructive font-mono text-xs shrink-0 mt-0.5">Row {err.row}</span>
+                    <span className="text-muted-foreground">·</span>
+                    <span className="text-muted-foreground text-xs font-medium shrink-0">{err.field}</span>
+                    <span className="text-foreground text-xs">{err.message}</span>
+                  </div>
+                ))}
+              </div>
+              <Alert>
+                <CheckCircle2 className="h-4 w-4" />
+                <AlertTitle>How to fix</AlertTitle>
+                <AlertDescription className="text-xs">
+                  Open your file, correct the highlighted rows, and re-upload. All dates must be valid (YYYY-MM-DD or DD/MM/YYYY), amounts must be numeric, and every row needs an account number with at least one non-zero debit or credit.
+                </AlertDescription>
+              </Alert>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" size="sm" onClick={downloadTemplate}>
+                <Download className="h-3.5 w-3.5 mr-1" />
+                Download Template
+              </Button>
+              <Button variant="default" onClick={() => { setTemplateErrorDialogOpen(false); setTemplateErrors([]); setTemplateValidationResult(null); }}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
     </div>
   );

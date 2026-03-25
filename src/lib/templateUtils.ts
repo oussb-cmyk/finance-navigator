@@ -83,11 +83,16 @@ export function detectTemplateMatch(headers: string[]): {
   };
 }
 
-/** Parse a template-matched file directly without AI detection */
-export function parseTemplateFile(
-  rows: Record<string, unknown>[],
-  mappedColumns: Record<string, string>,
-): {
+// ─── Strict validation types ──────────────────────────────────────
+
+export interface TemplateRowError {
+  row: number;       // 1-indexed spreadsheet row (header = row 1)
+  field: string;
+  message: string;
+}
+
+export interface TemplateValidationResult {
+  valid: boolean;
   entries: {
     date: string;
     accountCode: string;
@@ -96,13 +101,24 @@ export function parseTemplateFile(
     debit: number;
     credit: number;
   }[];
-  errors: string[];
-} {
-  const entries: ReturnType<typeof parseTemplateFile>['entries'] = [];
-  const errors: string[] = [];
+  errors: TemplateRowError[];
+  totalRows: number;
+  skippedEmpty: number;
+}
+
+/** Strictly validate and parse a template file. Blocks import on any error. */
+export function validateAndParseTemplate(
+  rows: Record<string, unknown>[],
+  mappedColumns: Record<string, string>,
+): TemplateValidationResult {
+  const entries: TemplateValidationResult['entries'] = [];
+  const errors: TemplateRowError[] = [];
+  let skippedEmpty = 0;
 
   for (let i = 0; i < rows.length; i++) {
     const row = rows[i];
+    const spreadsheetRow = i + 2; // Row 1 = header
+
     const rawDate = row[mappedColumns.date];
     const rawAcctNum = mappedColumns.accountNumber ? row[mappedColumns.accountNumber] : '';
     const rawAcctName = mappedColumns.accountName ? row[mappedColumns.accountName] : '';
@@ -110,36 +126,80 @@ export function parseTemplateFile(
     const rawDebit = row[mappedColumns.debit];
     const rawCredit = row[mappedColumns.credit];
 
-    // Skip empty rows
-    if (!rawDate && !rawDebit && !rawCredit) continue;
-
-    // Validate date
-    const date = parseTemplateDate(rawDate);
-    if (!date) {
-      errors.push(`Row ${i + 2}: Invalid date "${rawDate}"`);
+    // Skip completely empty rows
+    if (!rawDate && !rawDebit && !rawCredit && !rawAcctNum) {
+      skippedEmpty++;
       continue;
     }
 
-    // Validate numbers
+    let rowHasError = false;
+
+    // 1. Date validation
+    const date = parseTemplateDate(rawDate);
+    if (!date) {
+      errors.push({ row: spreadsheetRow, field: 'Date', message: `Invalid date "${rawDate}"` });
+      rowHasError = true;
+    }
+
+    // 2. Account Number must not be empty
+    const acctNum = String(rawAcctNum ?? '').trim();
+    if (!acctNum) {
+      errors.push({ row: spreadsheetRow, field: 'Account Number', message: 'Missing account number' });
+      rowHasError = true;
+    }
+
+    // 3. Debit & Credit must be numeric
     const debit = toNumber(rawDebit);
     const credit = toNumber(rawCredit);
 
-    if (debit === null && credit === null) {
-      errors.push(`Row ${i + 2}: No valid numeric debit or credit`);
-      continue;
+    if (rawDebit != null && String(rawDebit).trim() !== '' && debit === null) {
+      errors.push({ row: spreadsheetRow, field: 'Debit', message: `Not a valid number "${rawDebit}"` });
+      rowHasError = true;
+    }
+    if (rawCredit != null && String(rawCredit).trim() !== '' && credit === null) {
+      errors.push({ row: spreadsheetRow, field: 'Credit', message: `Not a valid number "${rawCredit}"` });
+      rowHasError = true;
     }
 
-    entries.push({
-      date,
-      accountCode: String(rawAcctNum ?? '').trim(),
-      accountName: String(rawAcctName ?? '').trim(),
-      description: String(rawDesc ?? '').trim(),
-      debit: debit ?? 0,
-      credit: credit ?? 0,
-    });
+    // 4. At least one of Debit or Credit must be filled (non-zero)
+    const dVal = debit ?? 0;
+    const cVal = credit ?? 0;
+    if (dVal === 0 && cVal === 0) {
+      errors.push({ row: spreadsheetRow, field: 'Debit/Credit', message: 'Both Debit and Credit are zero or empty' });
+      rowHasError = true;
+    }
+
+    if (!rowHasError) {
+      entries.push({
+        date: date!,
+        accountCode: acctNum,
+        accountName: String(rawAcctName ?? '').trim(),
+        description: String(rawDesc ?? '').trim(),
+        debit: dVal,
+        credit: cVal,
+      });
+    }
   }
 
-  return { entries, errors };
+  return {
+    valid: errors.length === 0,
+    entries,
+    errors,
+    totalRows: rows.length - skippedEmpty,
+    skippedEmpty,
+  };
+}
+
+/** @deprecated Use validateAndParseTemplate instead */
+export function parseTemplateFile(
+  rows: Record<string, unknown>[],
+  mappedColumns: Record<string, string>,
+) {
+  const result = validateAndParseTemplate(rows, mappedColumns);
+  return {
+    entries: result.entries,
+    errors: result.errors.map(e => `Row ${e.row}: ${e.message}`),
+  };
 }
 
 function parseTemplateDate(val: unknown): string | null {
