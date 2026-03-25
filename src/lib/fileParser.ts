@@ -149,9 +149,53 @@ function parseDate(val: unknown): string {
 function isTotalsRow(row: RawRow): boolean {
   const vals = Object.values(row).map(v => String(v ?? '').toLowerCase().trim());
   return vals.some(v =>
-    /^total/i.test(v) || /^sous[\s-]?total/i.test(v) || /^sub[\s-]?total/i.test(v) ||
-    /^grand\s*total/i.test(v) || /^solde/i.test(v) || v === '---' || v === '==='
+    /^total/i.test(v) || /^totaux/i.test(v) || /^sous[\s-]?total/i.test(v) || /^sub[\s-]?total/i.test(v) ||
+    /^grand\s*total/i.test(v) || /^solde/i.test(v) || /^totaux\s*du\s*poste/i.test(v) ||
+    /^totaux\s*(g[ée]n[ée]raux|du\s*compte|du\s*journal)/i.test(v) ||
+    /^report\s*(nouveau|à\s*nouveau)/i.test(v) || /^carried\s*forward/i.test(v) ||
+    v === '---' || v === '===' || v === '***'
   );
+}
+
+/** Detect if a row is an account header in a hierarchical ledger (account code + label, no amounts) */
+function detectAccountHeader(row: RawRow, mapping: ColumnMapping): { code: string; name: string } | null {
+  const vals = Object.values(row);
+  const allText = vals.map(v => String(v ?? '').trim()).join(' ');
+
+  // Check if row has financial data — if so, it's not a header
+  let hasAmount = false;
+  if (mapping.debit) hasAmount = hasAmount || parseNumber(row[mapping.debit]) !== 0;
+  if (mapping.credit) hasAmount = hasAmount || parseNumber(row[mapping.credit]) !== 0;
+  if (mapping.amount) hasAmount = hasAmount || parseNumber(row[mapping.amount]) !== 0;
+  if (hasAmount) return null;
+
+  // Check if row has a date — headers typically don't
+  if (mapping.date) {
+    const dateVal = String(row[mapping.date] ?? '').trim();
+    if (dateVal && /\d{2}[/\-.]?\d{2}[/\-.]?\d{2,4}/.test(dateVal)) return null;
+  }
+
+  // Try to extract account code from the mapped column
+  if (mapping.account_code) {
+    const code = String(row[mapping.account_code] ?? '').trim();
+    if (code && /^\d{3,}/.test(code)) {
+      const name = mapping.account_name
+        ? String(row[mapping.account_name] ?? '').trim()
+        : (mapping.description ? String(row[mapping.description] ?? '').trim() : '');
+      if (name || code) return { code, name: name || `Account ${code}` };
+    }
+  }
+
+  // Fallback: detect "123456 Account Name" pattern in any cell
+  for (const v of vals) {
+    const s = String(v ?? '').trim();
+    const match = s.match(/^(\d{3,})\s+(.+)/);
+    if (match) {
+      return { code: match[1], name: match[2].trim() };
+    }
+  }
+
+  return null;
 }
 
 function isEmptyRow(row: RawRow): boolean {
