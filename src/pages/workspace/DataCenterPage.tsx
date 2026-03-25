@@ -74,6 +74,15 @@ export default function DataCenterPage() {
       if (type === 'xlsx' || type === 'csv') {
         try {
           const preview = await previewFile(f);
+
+          // Handle report-style files with no extractable data
+          if (preview.structureType === 'report' && preview.headers.length === 0) {
+            updateFileStatus(projectId, fileId, 'error');
+            setPendingFile({ fileId, rawFile: f, preview });
+            setDialogMode('report');
+            continue;
+          }
+
           if (preview.headers.length === 0) {
             updateFileStatus(projectId, fileId, 'error');
             toast.error(`No data found in ${f.name}`);
@@ -81,17 +90,23 @@ export default function DataCenterPage() {
           }
 
           // Save file fingerprint for future pattern matching
-          const fpId = generateFileFingerprint(preview.headers, preview.structureType);
+          const fpType = preview.structureType === 'report' ? 'tabular' as const : preview.structureType;
+          const fpId = generateFileFingerprint(preview.headers, fpType);
           saveFileFingerprint(projectId, {
             id: fpId,
-            structureType: preview.structureType,
-            columnMapping: preview.structureType === 'tabular' ? preview.suggestedMapping as unknown as Record<string, string | null> : undefined,
+            structureType: fpType === 'hierarchical' ? 'hierarchical' : 'tabular',
+            columnMapping: fpType === 'tabular' ? preview.suggestedMapping as unknown as Record<string, string | null> : undefined,
             matchCount: 1,
             lastUsed: Date.now(),
           });
 
+          // Report files with extracted data: show as tabular with a toast warning
+          if (preview.structureType === 'report' && preview.reportInfo) {
+            toast.info(`Report-style layout detected in ${f.name}. Data table was auto-extracted.`, { duration: 5000 });
+          }
+
           setPendingFile({ fileId, rawFile: f, preview });
-          setDialogMode(preview.structureType);
+          setDialogMode(preview.structureType === 'report' ? 'tabular' : preview.structureType);
         } catch (err) {
           updateFileStatus(projectId, fileId, 'error');
           toast.error(`Failed to read ${f.name}: ${err instanceof Error ? err.message : 'Unknown error'}`);
