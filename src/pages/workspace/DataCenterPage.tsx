@@ -9,7 +9,7 @@ import { useProjectFiles } from '@/hooks/useStableStoreSelectors';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { previewFile, parseFileWithMapping, hierarchicalToParseResult } from '@/lib/fileParser';
-import type { PreviewData, ColumnMapping, HierarchicalTransaction, DetectedAccount, ReportDetectionResult } from '@/lib/fileParser';
+import type { PreviewData, ColumnMapping, HierarchicalTransaction, DetectedAccount } from '@/lib/fileParser';
 import { computeRowConfidence } from '@/lib/confidenceScoring';
 import type { ScoredRow } from '@/lib/confidenceScoring';
 import { downloadTemplate, detectTemplateMatch, validateAndParseTemplate } from '@/lib/templateUtils';
@@ -17,6 +17,8 @@ import type { TemplateRowError, TemplateValidationResult } from '@/lib/templateU
 import { ColumnMappingDialog } from '@/components/workspace/ColumnMappingDialog';
 import { HierarchicalPreviewDialog } from '@/components/workspace/HierarchicalPreviewDialog';
 import { ReviewValidationDialog } from '@/components/workspace/ReviewValidationDialog';
+import { ImportPreviewDialog } from '@/components/workspace/ImportPreviewDialog';
+import type { ImportRow } from '@/lib/dataQuality';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from 'sonner';
@@ -50,16 +52,63 @@ export default function DataCenterPage() {
   const [pendingFile, setPendingFile] = useState<PendingFile | null>(null);
   const [dialogMode, setDialogMode] = useState<'tabular' | 'hierarchical' | 'report' | null>(null);
 
-  // Review dialog state
+  // Review dialog state (AI path)
   const [reviewRows, setReviewRows] = useState<ScoredRow[] | null>(null);
   const [reviewFileName, setReviewFileName] = useState('');
   const [reviewFileId, setReviewFileId] = useState('');
+
+  // Import Preview dialog state (mandatory preview step)
+  const [previewData, setPreviewData] = useState<{ rows: ImportRow[]; fileName: string; fileId: string; mode: 'template' | 'ai' } | null>(null);
 
   // Template validation error state
   const [templateErrors, setTemplateErrors] = useState<TemplateRowError[]>([]);
   const [templateErrorDialogOpen, setTemplateErrorDialogOpen] = useState(false);
   const [templateValidationResult, setTemplateValidationResult] = useState<TemplateValidationResult | null>(null);
   const [templateErrorFileName, setTemplateErrorFileName] = useState('');
+
+  // ─── Commit rows to store (shared by both paths) ───────────────
+
+  const commitImport = useCallback((rows: ImportRow[], fileId: string, fileName: string, mode: 'template' | 'ai') => {
+    if (!projectId || rows.length === 0) return;
+
+    const entries = rows.map((r, idx) => ({
+      id: `e-${Date.now()}-${idx}`,
+      date: r.date,
+      reference: `JE-${String(idx + 1).padStart(3, '0')}`,
+      description: r.description,
+      accountCode: r.accountCode,
+      accountName: r.accountName,
+      debit: r.debit,
+      credit: r.credit,
+      isValidated: true,
+      source: fileName,
+    }));
+
+    const accountMap = new Map<string, string>();
+    for (const r of rows) {
+      if (r.accountCode && r.accountCode !== '' && r.accountCode !== 'UNKNOWN') {
+        accountMap.set(r.accountCode, r.accountName);
+      }
+    }
+
+    const mappings = Array.from(accountMap.entries()).map(([code, name], idx) => ({
+      id: `m-${Date.now()}-${idx}`,
+      accountCode: code,
+      accountName: name,
+      suggestedCategory: '',
+      confirmedCategory: '',
+      type: 'asset' as const,
+      isMapped: false,
+    }));
+
+    updateFileStatus(projectId, fileId, 'processed', entries.length);
+    addProjectEntries(projectId, entries);
+    mergeProjectMappings(projectId, mappings);
+    learnAccountPatterns(projectId, Array.from(accountMap.entries()).map(([code, name]) => ({ code, name })));
+
+    const label = mode === 'template' ? 'Imported using template (100% accurate)' : 'AI parsing applied — please review';
+    toast.success(`✅ ${label} — ${entries.length} entries imported`, { duration: 5000 });
+  }, [projectId, updateFileStatus, addProjectEntries, mergeProjectMappings, learnAccountPatterns]);
 
   // ─── Template import (strict deterministic path) ───────────────
 
@@ -85,7 +134,6 @@ export default function DataCenterPage() {
 
       const result = validateAndParseTemplate(rows, mappedColumns);
 
-      // ── Block import if validation errors exist ──
       if (!result.valid) {
         updateFileStatus(projectId, fileId, 'error');
         setTemplateErrors(result.errors);
@@ -101,43 +149,17 @@ export default function DataCenterPage() {
         return;
       }
 
-      // Direct import — deterministic, no AI
-      const journalEntries = result.entries.map((e, idx) => ({
-        id: `e-${Date.now()}-${idx}`,
+      // Open mandatory preview instead of direct import
+      const importRows: ImportRow[] = result.entries.map(e => ({
         date: e.date,
-        reference: `JE-${String(idx + 1).padStart(3, '0')}`,
-        description: e.description,
         accountCode: e.accountCode,
         accountName: e.accountName,
+        description: e.description,
         debit: e.debit,
         credit: e.credit,
-        isValidated: true,
-        source: file.name,
       }));
 
-      const accountMap = new Map<string, string>();
-      for (const e of result.entries) {
-        if (e.accountCode && e.accountCode !== '') {
-          accountMap.set(e.accountCode, e.accountName);
-        }
-      }
-
-      const mappings = Array.from(accountMap.entries()).map(([code, name], idx) => ({
-        id: `m-${Date.now()}-${idx}`,
-        accountCode: code,
-        accountName: name,
-        suggestedCategory: '',
-        confirmedCategory: '',
-        type: 'asset' as const,
-        isMapped: false,
-      }));
-
-      updateFileStatus(projectId, fileId, 'processed', journalEntries.length);
-      addProjectEntries(projectId, journalEntries);
-      mergeProjectMappings(projectId, mappings);
-      learnAccountPatterns(projectId, Array.from(accountMap.entries()).map(([code, name]) => ({ code, name })));
-
-      toast.success(`✅ Imported using template (100% accurate) — ${journalEntries.length} entries with 0 errors`, { duration: 5000 });
+      setPreviewData({ rows: importRows, fileName: file.name, fileId, mode: 'template' });
     } catch (err) {
       updateFileStatus(projectId, fileId, 'error');
       toast.error(`Template import failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -148,9 +170,9 @@ export default function DataCenterPage() {
         return next;
       });
     }
-  }, [projectId, updateFileStatus, addProjectEntries, mergeProjectMappings, learnAccountPatterns]);
+  }, [projectId, updateFileStatus]);
 
-  // ─── Template-only upload (deterministic, no AI) ─────────────────
+  // ─── Template-only upload ─────────────────────────────────────
 
   const handleTemplateUpload = useCallback(async (fileList: FileList) => {
     if (!projectId) return;
@@ -160,18 +182,13 @@ export default function DataCenterPage() {
       const type = ext === 'pdf' ? 'pdf' : ext === 'csv' ? 'csv' : 'xlsx';
       const fileId = `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       const newFile: UploadedFile = {
-        id: fileId,
-        name: f.name,
-        type,
-        size: f.size,
+        id: fileId, name: f.name, type, size: f.size,
         uploadedAt: new Date().toISOString().slice(0, 10),
-        status: 'raw',
-        entriesExtracted: 0,
+        status: 'raw', entriesExtracted: 0,
       };
       addFile(projectId, newFile);
       setRawFiles(prev => new Map(prev).set(fileId, f));
 
-      // Strict template check — reject if not matching
       try {
         const buffer = await f.arrayBuffer();
         const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
@@ -182,10 +199,7 @@ export default function DataCenterPage() {
 
         if (!isTemplate) {
           updateFileStatus(projectId, fileId, 'error');
-          toast.error(
-            `"${f.name}" does not match template format. Please use the template or upload via "Upload Any File".`,
-            { duration: 7000 },
-          );
+          toast.error(`"${f.name}" does not match template format. Please use the template or upload via "Upload Any File".`, { duration: 7000 });
           continue;
         }
 
@@ -197,7 +211,7 @@ export default function DataCenterPage() {
     }
   }, [projectId, addFile, updateFileStatus, handleTemplateImport]);
 
-  // ─── AI parsing path (any file, no template shortcut) ───────────
+  // ─── AI parsing path ──────────────────────────────────────────
 
   const handleFiles = useCallback(async (fileList: FileList) => {
     if (!projectId) return;
@@ -207,13 +221,9 @@ export default function DataCenterPage() {
       const type = ext === 'pdf' ? 'pdf' : ext === 'csv' ? 'csv' : 'xlsx';
       const fileId = `f-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
       const newFile: UploadedFile = {
-        id: fileId,
-        name: f.name,
-        type,
-        size: f.size,
+        id: fileId, name: f.name, type, size: f.size,
         uploadedAt: new Date().toISOString().slice(0, 10),
-        status: 'raw',
-        entriesExtracted: 0,
+        status: 'raw', entriesExtracted: 0,
       };
       addFile(projectId, newFile);
       setRawFiles(prev => new Map(prev).set(fileId, f));
@@ -235,27 +245,20 @@ export default function DataCenterPage() {
             continue;
           }
 
-          // Save fingerprint
           const fpType = preview.structureType === 'report' ? 'tabular' as const : preview.structureType;
           const fpId = generateFileFingerprint(preview.headers, fpType);
           saveFileFingerprint(projectId, {
-            id: fpId,
-            structureType: fpType === 'hierarchical' ? 'hierarchical' : 'tabular',
+            id: fpId, structureType: fpType === 'hierarchical' ? 'hierarchical' : 'tabular',
             columnMapping: fpType === 'tabular' ? preview.suggestedMapping as unknown as Record<string, string | null> : undefined,
-            matchCount: 1,
-            lastUsed: Date.now(),
+            matchCount: 1, lastUsed: Date.now(),
           });
 
           if (preview.structureType === 'report' && preview.reportInfo) {
             toast.info(`Report-style layout detected in ${f.name}. Data table was auto-extracted.`, { duration: 5000 });
           }
 
-          // Low confidence warning with template suggestion
           if (preview.confidence < 0.7 && preview.structureType !== 'report') {
-            toast.warning(
-              `Low detection confidence for ${f.name}. Consider using the Excel template for reliable import.`,
-              { duration: 7000 },
-            );
+            toast.warning(`Low detection confidence for ${f.name}. Consider using the Excel template for reliable import.`, { duration: 7000 });
           }
 
           toast.info(`AI parsing applied to "${f.name}" — please review the results`, { duration: 5000 });
@@ -270,7 +273,20 @@ export default function DataCenterPage() {
     }
   }, [projectId, addFile, updateFileStatus, saveFileFingerprint]);
 
-  /** Score rows and open review dialog */
+  /** Open import preview for AI-parsed rows */
+  const openImportPreview = (
+    entries: { date: string; accountCode: string; accountName: string; description: string; debit: number; credit: number }[],
+    fileId: string,
+    fileName: string,
+  ) => {
+    const importRows: ImportRow[] = entries.map(e => ({
+      date: e.date, accountCode: e.accountCode, accountName: e.accountName,
+      description: e.description, debit: e.debit, credit: e.credit,
+    }));
+    setPreviewData({ rows: importRows, fileName, fileId, mode: 'ai' });
+  };
+
+  /** Score rows and open review dialog (kept for backward compat with existing AI flow) */
   const openReviewDialog = (
     entries: { date: string; accountCode: string; accountName: string; description: string; debit: number; credit: number }[],
     fileId: string,
@@ -280,22 +296,16 @@ export default function DataCenterPage() {
       const boost = pid ? getAccountConfidenceBoost(pid, e.accountCode) : 0;
       const confidence = computeRowConfidence(e, boost);
       return {
-        rowIndex: idx,
-        date: e.date,
-        accountCode: e.accountCode,
-        accountName: e.accountName,
-        description: e.description,
-        debit: e.debit,
-        credit: e.credit,
-        confidence,
-        isValidated: confidence.level === 'high',
-        isEdited: false,
+        rowIndex: idx, date: e.date, accountCode: e.accountCode, accountName: e.accountName,
+        description: e.description, debit: e.debit, credit: e.credit,
+        confidence, isValidated: confidence.level === 'high', isEdited: false,
       };
     });
 
     const allHigh = scored.every(r => r.confidence.level === 'high');
     if (allHigh && scored.length > 0) {
-      finalizeImport(scored, [], fileId, fileName);
+      // Still show preview before import
+      openImportPreview(entries, fileId, fileName);
       return;
     }
 
@@ -304,54 +314,27 @@ export default function DataCenterPage() {
     setReviewFileId(fileId);
   };
 
-  /** Finalize import: save entries, learn patterns */
-  const finalizeImport = (
-    acceptedRows: ScoredRow[],
-    corrections: CorrectionRecord[],
-    fileId: string,
-    fileName: string,
-  ) => {
-    if (!projectId || acceptedRows.length === 0) return;
-
-    const entries = acceptedRows.map((r, idx) => ({
-      id: `e-${Date.now()}-${idx}`,
-      date: r.date,
-      reference: `JE-${String(idx + 1).padStart(3, '0')}`,
-      description: r.description,
-      accountCode: r.accountCode,
-      accountName: r.accountName,
-      debit: r.debit,
-      credit: r.credit,
-      isValidated: r.isValidated,
-      source: fileName,
+  /** Finalize import from ReviewValidationDialog (legacy AI scored flow) */
+  const finalizeFromReview = (acceptedRows: ScoredRow[], corrections: CorrectionRecord[]) => {
+    if (!projectId) return;
+    const importRows: ImportRow[] = acceptedRows.map(r => ({
+      date: r.date, accountCode: r.accountCode, accountName: r.accountName,
+      description: r.description, debit: r.debit, credit: r.credit,
     }));
+    // Open mandatory preview
+    setPreviewData({ rows: importRows, fileName: reviewFileName, fileId: reviewFileId, mode: 'ai' });
+    setReviewRows(null);
 
-    const accountMap = new Map<string, string>();
-    for (const r of acceptedRows) {
-      if (r.accountCode && r.accountCode !== 'UNKNOWN') {
-        accountMap.set(r.accountCode, r.accountName);
-      }
-    }
-
-    const mappings = Array.from(accountMap.entries()).map(([code, name], idx) => ({
-      id: `m-${Date.now()}-${idx}`,
-      accountCode: code,
-      accountName: name,
-      suggestedCategory: '',
-      confirmedCategory: '',
-      type: 'asset' as const,
-      isMapped: false,
-    }));
-
-    updateFileStatus(projectId, fileId, 'processed', entries.length);
-    addProjectEntries(projectId, entries);
-    mergeProjectMappings(projectId, mappings);
-    learnAccountPatterns(projectId, Array.from(accountMap.entries()).map(([code, name]) => ({ code, name })));
     if (corrections.length > 0) {
       recordBatchCorrections(projectId, corrections);
     }
+  };
 
-    toast.success(`Imported ${entries.length} entries from ${fileName}`);
+  /** Handle confirmed import from ImportPreviewDialog */
+  const handlePreviewConfirm = (rows: ImportRow[]) => {
+    if (!previewData) return;
+    commitImport(rows, previewData.fileId, previewData.fileName, previewData.mode);
+    setPreviewData(null);
   };
 
   const handleMappingConfirm = async (mapping: ColumnMapping) => {
@@ -374,22 +357,14 @@ export default function DataCenterPage() {
       updateFileStatus(projectId, fileId, 'error');
       toast.error(`Failed to parse ${rawFile.name}: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
-      setProcessingIds(prev => {
-        const next = new Set(prev);
-        next.delete(fileId);
-        return next;
-      });
+      setProcessingIds(prev => { const next = new Set(prev); next.delete(fileId); return next; });
     }
   };
 
-  const handleHierarchicalConfirm = (
-    transactions: HierarchicalTransaction[],
-    accounts: DetectedAccount[],
-  ) => {
+  const handleHierarchicalConfirm = (transactions: HierarchicalTransaction[], accounts: DetectedAccount[]) => {
     if (!projectId || !pendingFile) return;
     const { fileId, rawFile } = pendingFile;
     closePending();
-
     const result = hierarchicalToParseResult(transactions, accounts, rawFile.name);
     if (result.entries.length === 0) {
       updateFileStatus(projectId, fileId, 'error');
@@ -399,59 +374,33 @@ export default function DataCenterPage() {
     }
   };
 
-  const handleReviewConfirm = (acceptedRows: ScoredRow[], corrections: CorrectionRecord[]) => {
-    finalizeImport(acceptedRows, corrections, reviewFileId, reviewFileName);
-    setReviewRows(null);
-  };
-
-  const handleFallbackToMapping = () => {
-    setDialogMode('tabular');
-  };
-
-  const closePending = () => {
-    setPendingFile(null);
-    setDialogMode(null);
-  };
+  const handleFallbackToMapping = () => { setDialogMode('tabular'); };
+  const closePending = () => { setPendingFile(null); setDialogMode(null); };
 
   const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
+    e.preventDefault(); setDragOver(false);
     if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
   }, [handleFiles]);
 
   const handleReprocess = async (fileId: string) => {
     if (!projectId) return;
     const raw = rawFiles.get(fileId);
-    if (!raw) {
-      toast.error('Original file not available. Please re-upload.');
-      return;
-    }
+    if (!raw) { toast.error('Original file not available. Please re-upload.'); return; }
     try {
       const preview = await previewFile(raw);
       if (preview.structureType === 'report' && preview.headers.length === 0) {
-        setPendingFile({ fileId, rawFile: raw, preview });
-        setDialogMode('report');
-        return;
+        setPendingFile({ fileId, rawFile: raw, preview }); setDialogMode('report'); return;
       }
-      if (preview.headers.length === 0) {
-        toast.error('No data found in file.');
-        return;
-      }
+      if (preview.headers.length === 0) { toast.error('No data found in file.'); return; }
       setPendingFile({ fileId, rawFile: raw, preview });
       setDialogMode(preview.structureType === 'report' ? 'tabular' : preview.structureType);
-    } catch {
-      toast.error('Failed to read file.');
-    }
+    } catch { toast.error('Failed to read file.'); }
   };
 
   const handleDelete = (fileId: string) => {
     if (!projectId) return;
     deleteFile(projectId, fileId);
-    setRawFiles(prev => {
-      const next = new Map(prev);
-      next.delete(fileId);
-      return next;
-    });
+    setRawFiles(prev => { const next = new Map(prev); next.delete(fileId); return next; });
   };
 
   const fileIcon = (type: string) => {
@@ -601,24 +550,15 @@ export default function DataCenterPage() {
 
       {/* Tabular mode: Column mapping dialog */}
       {pendingFile && dialogMode === 'tabular' && (
-        <ColumnMappingDialog
-          open
-          onOpenChange={(open) => { if (!open) closePending(); }}
-          preview={pendingFile.preview}
-          onConfirm={handleMappingConfirm}
-        />
+        <ColumnMappingDialog open onOpenChange={(open) => { if (!open) closePending(); }}
+          preview={pendingFile.preview} onConfirm={handleMappingConfirm} />
       )}
 
-      {/* Hierarchical mode: Structure preview dialog */}
+      {/* Hierarchical mode */}
       {pendingFile && dialogMode === 'hierarchical' && pendingFile.preview.hierarchicalResult && (
-        <HierarchicalPreviewDialog
-          open
-          onOpenChange={(open) => { if (!open) closePending(); }}
-          result={pendingFile.preview.hierarchicalResult}
-          fileName={pendingFile.preview.fileName}
-          onConfirm={handleHierarchicalConfirm}
-          onFallbackToMapping={handleFallbackToMapping}
-        />
+        <HierarchicalPreviewDialog open onOpenChange={(open) => { if (!open) closePending(); }}
+          result={pendingFile.preview.hierarchicalResult} fileName={pendingFile.preview.fileName}
+          onConfirm={handleHierarchicalConfirm} onFallbackToMapping={handleFallbackToMapping} />
       )}
 
       {/* Report-style file warning dialog */}
@@ -646,9 +586,7 @@ export default function DataCenterPage() {
                 <div className="bg-muted rounded-lg p-3 text-sm space-y-1">
                   <p className="font-medium text-muted-foreground">Detection details:</p>
                   <ul className="list-disc list-inside text-muted-foreground">
-                    {pendingFile.preview.reportInfo.reasons.map((r, i) => (
-                      <li key={i}>{r}</li>
-                    ))}
+                    {pendingFile.preview.reportInfo.reasons.map((r, i) => (<li key={i}>{r}</li>))}
                   </ul>
                 </div>
               )}
@@ -668,31 +606,32 @@ export default function DataCenterPage() {
             </div>
             <DialogFooter className="gap-2">
               <Button variant="outline" onClick={() => {
-                if (pendingFile.preview.headers.length > 0) {
-                  setDialogMode('tabular');
-                } else {
-                  closePending();
-                  toast.error('No columns could be detected. Please upload a structured export.');
-                }
+                if (pendingFile.preview.headers.length > 0) { setDialogMode('tabular'); }
+                else { closePending(); toast.error('No columns could be detected. Please upload a structured export.'); }
               }}>
                 Try Manual Mapping
               </Button>
-              <Button variant="default" onClick={closePending}>
-                Close
-              </Button>
+              <Button variant="default" onClick={closePending}>Close</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       )}
 
-      {/* Review & Validation dialog */}
+      {/* Review & Validation dialog (AI scoring) */}
       {reviewRows && (
-        <ReviewValidationDialog
+        <ReviewValidationDialog open onOpenChange={(open) => { if (!open) setReviewRows(null); }}
+          scoredRows={reviewRows} fileName={reviewFileName} onConfirm={finalizeFromReview} />
+      )}
+
+      {/* ★ Mandatory Import Preview Dialog */}
+      {previewData && (
+        <ImportPreviewDialog
           open
-          onOpenChange={(open) => { if (!open) setReviewRows(null); }}
-          scoredRows={reviewRows}
-          fileName={reviewFileName}
-          onConfirm={handleReviewConfirm}
+          onOpenChange={(open) => { if (!open) setPreviewData(null); }}
+          rows={previewData.rows}
+          fileName={previewData.fileName}
+          mode={previewData.mode}
+          onConfirm={handlePreviewConfirm}
         />
       )}
 
