@@ -2,13 +2,18 @@ import { useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { Upload, FileText, FileSpreadsheet, File, Trash2, RefreshCw, Loader2 } from 'lucide-react';
 import { useProjectStore } from '@/store/useProjectStore';
+import { useLearningStore, generateFileFingerprint } from '@/store/useLearningStore';
+import type { CorrectionRecord } from '@/store/useLearningStore';
 import { useProjectFiles } from '@/hooks/useStableStoreSelectors';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { previewFile, parseFileWithMapping, hierarchicalToParseResult } from '@/lib/fileParser';
 import type { PreviewData, ColumnMapping, HierarchicalTransaction, DetectedAccount } from '@/lib/fileParser';
+import { computeRowConfidence } from '@/lib/confidenceScoring';
+import type { ScoredRow } from '@/lib/confidenceScoring';
 import { ColumnMappingDialog } from '@/components/workspace/ColumnMappingDialog';
 import { HierarchicalPreviewDialog } from '@/components/workspace/HierarchicalPreviewDialog';
+import { ReviewValidationDialog } from '@/components/workspace/ReviewValidationDialog';
 import { toast } from 'sonner';
 import type { UploadedFile } from '@/types/finance';
 
@@ -27,13 +32,23 @@ export default function DataCenterPage() {
   const deleteFile = useProjectStore((s) => s.deleteFile);
   const addProjectEntries = useProjectStore((s) => s.addProjectEntries);
   const mergeProjectMappings = useProjectStore((s) => s.mergeProjectMappings);
+
+  const learnAccountPatterns = useLearningStore((s) => s.learnAccountPatterns);
+  const recordBatchCorrections = useLearningStore((s) => s.recordBatchCorrections);
+  const saveFileFingerprint = useLearningStore((s) => s.saveFileFingerprint);
+  const getAccountConfidenceBoost = useLearningStore((s) => s.getAccountConfidenceBoost);
+
   const [dragOver, setDragOver] = useState(false);
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
   const [rawFiles, setRawFiles] = useState<Map<string, globalThis.File>>(new Map());
 
-  // Dual-mode state
   const [pendingFile, setPendingFile] = useState<PendingFile | null>(null);
   const [dialogMode, setDialogMode] = useState<'tabular' | 'hierarchical' | null>(null);
+
+  // Review dialog state
+  const [reviewRows, setReviewRows] = useState<ScoredRow[] | null>(null);
+  const [reviewFileName, setReviewFileName] = useState('');
+  const [reviewFileId, setReviewFileId] = useState('');
 
   const handleFiles = useCallback(async (fileList: FileList) => {
     if (!projectId) return;
@@ -62,8 +77,18 @@ export default function DataCenterPage() {
             toast.error(`No data found in ${f.name}`);
             continue;
           }
+
+          // Save file fingerprint for future pattern matching
+          const fpId = generateFileFingerprint(preview.headers, preview.structureType);
+          saveFileFingerprint(projectId, {
+            id: fpId,
+            structureType: preview.structureType,
+            columnMapping: preview.structureType === 'tabular' ? preview.suggestedMapping as unknown as Record<string, string | null> : undefined,
+            matchCount: 1,
+            lastUsed: Date.now(),
+          });
+
           setPendingFile({ fileId, rawFile: f, preview });
-          // Route to the right dialog based on detected structure
           setDialogMode(preview.structureType);
         } catch (err) {
           updateFileStatus(projectId, fileId, 'error');
@@ -71,7 +96,94 @@ export default function DataCenterPage() {
         }
       }
     }
-  }, [projectId, addFile, updateFileStatus]);
+  }, [projectId, addFile, updateFileStatus, saveFileFingerprint]);
+
+  /** Score rows and open review dialog */
+  const openReviewDialog = (
+    entries: { date: string; accountCode: string; accountName: string; description: string; debit: number; credit: number }[],
+    fileId: string,
+    fileName: string,
+  ) => {
+    const scored: ScoredRow[] = entries.map((e, idx) => {
+      const boost = pid ? getAccountConfidenceBoost(pid, e.accountCode) : 0;
+      const confidence = computeRowConfidence(e, boost);
+      return {
+        rowIndex: idx,
+        date: e.date,
+        accountCode: e.accountCode,
+        accountName: e.accountName,
+        description: e.description,
+        debit: e.debit,
+        credit: e.credit,
+        confidence,
+        isValidated: confidence.level === 'high',
+        isEdited: false,
+      };
+    });
+
+    // If ALL rows are high confidence, skip review and import directly
+    const allHigh = scored.every(r => r.confidence.level === 'high');
+    if (allHigh && scored.length > 0) {
+      finalizeImport(scored, [], fileId, fileName);
+      return;
+    }
+
+    setReviewRows(scored);
+    setReviewFileName(fileName);
+    setReviewFileId(fileId);
+  };
+
+  /** Finalize import: save entries, learn patterns */
+  const finalizeImport = (
+    acceptedRows: ScoredRow[],
+    corrections: CorrectionRecord[],
+    fileId: string,
+    fileName: string,
+  ) => {
+    if (!projectId || acceptedRows.length === 0) return;
+
+    const entries = acceptedRows.map((r, idx) => ({
+      id: `e-${Date.now()}-${idx}`,
+      date: r.date,
+      reference: `JE-${String(idx + 1).padStart(3, '0')}`,
+      description: r.description,
+      accountCode: r.accountCode,
+      accountName: r.accountName,
+      debit: r.debit,
+      credit: r.credit,
+      isValidated: r.isValidated,
+      source: fileName,
+    }));
+
+    const accountMap = new Map<string, string>();
+    for (const r of acceptedRows) {
+      if (r.accountCode && r.accountCode !== 'UNKNOWN') {
+        accountMap.set(r.accountCode, r.accountName);
+      }
+    }
+
+    const mappings = Array.from(accountMap.entries()).map(([code, name], idx) => ({
+      id: `m-${Date.now()}-${idx}`,
+      accountCode: code,
+      accountName: name,
+      suggestedCategory: '',
+      confirmedCategory: '',
+      type: 'asset' as const,
+      isMapped: false,
+    }));
+
+    updateFileStatus(projectId, fileId, 'processed', entries.length);
+    addProjectEntries(projectId, entries);
+    mergeProjectMappings(projectId, mappings);
+
+    // Learn from this import
+    learnAccountPatterns(projectId, Array.from(accountMap.entries()).map(([code, name]) => ({ code, name })));
+    if (corrections.length > 0) {
+      recordBatchCorrections(projectId, corrections);
+    }
+
+    toast.success(`Imported ${entries.length} entries from ${fileName}`);
+  };
 
   // Tabular mode: column mapping confirmed
   const handleMappingConfirm = async (mapping: ColumnMapping) => {
@@ -86,12 +198,10 @@ export default function DataCenterPage() {
       const result = await parseFileWithMapping(rawFile, mapping);
       if (result.entries.length === 0) {
         updateFileStatus(projectId, fileId, 'error');
-        toast.error(`No valid entries found in ${rawFile.name}. Check your column mapping.`);
+        toast.error(`No valid entries found in ${rawFile.name}.`);
       } else {
-        updateFileStatus(projectId, fileId, 'processed', result.entriesExtracted);
-        addProjectEntries(projectId, result.entries);
-        mergeProjectMappings(projectId, result.mappings);
-        toast.success(`Extracted ${result.entriesExtracted} entries and ${result.mappings.length} accounts from ${rawFile.name}`);
+        // Route through confidence scoring + review
+        openReviewDialog(result.entries, fileId, rawFile.name);
       }
     } catch (err) {
       updateFileStatus(projectId, fileId, 'error');
@@ -119,14 +229,16 @@ export default function DataCenterPage() {
       updateFileStatus(projectId, fileId, 'error');
       toast.error(`No entries to import from ${rawFile.name}.`);
     } else {
-      updateFileStatus(projectId, fileId, 'processed', result.entriesExtracted);
-      addProjectEntries(projectId, result.entries);
-      mergeProjectMappings(projectId, result.mappings);
-      toast.success(`Imported ${result.entriesExtracted} entries and ${result.mappings.length} accounts from ${rawFile.name}`);
+      // Route through confidence scoring + review
+      openReviewDialog(result.entries, fileId, rawFile.name);
     }
   };
 
-  // Switch from hierarchical to manual column mapping
+  const handleReviewConfirm = (acceptedRows: ScoredRow[], corrections: CorrectionRecord[]) => {
+    finalizeImport(acceptedRows, corrections, reviewFileId, reviewFileName);
+    setReviewRows(null);
+  };
+
   const handleFallbackToMapping = () => {
     setDialogMode('tabular');
   };
@@ -182,7 +294,7 @@ export default function DataCenterPage() {
     <div>
       <div className="page-header">
         <h1 className="page-title">Data Center</h1>
-        <p className="page-subtitle">Upload financial files — structure is auto-detected for you</p>
+        <p className="page-subtitle">Upload financial files — structure is auto-detected, scored, and validated</p>
       </div>
 
       <div
@@ -278,6 +390,17 @@ export default function DataCenterPage() {
           fileName={pendingFile.preview.fileName}
           onConfirm={handleHierarchicalConfirm}
           onFallbackToMapping={handleFallbackToMapping}
+        />
+      )}
+
+      {/* Review & Validation dialog */}
+      {reviewRows && (
+        <ReviewValidationDialog
+          open
+          onOpenChange={(open) => { if (!open) setReviewRows(null); }}
+          scoredRows={reviewRows}
+          fileName={reviewFileName}
+          onConfirm={handleReviewConfirm}
         />
       )}
     </div>
