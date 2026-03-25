@@ -494,7 +494,7 @@ export default function DataCenterPage() {
                 input.accept = '.xlsx,.xls,.csv';
                 input.onchange = (e) => {
                   const f = (e.target as HTMLInputElement).files;
-                  if (f) handleFiles(f);
+                  if (f) handleTemplateUpload(f);
                 };
                 input.click();
               }}>
