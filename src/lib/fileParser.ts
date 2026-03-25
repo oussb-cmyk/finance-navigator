@@ -399,7 +399,7 @@ function isRepeatedHeaderRow(row: RawRow, originalHeaders: string[]): boolean {
 
 // ─── Hierarchical parsing ─────────────────────────────────────────
 
-export type FileStructureType = 'tabular' | 'hierarchical';
+export type FileStructureType = 'tabular' | 'hierarchical' | 'report';
 
 export interface DetectedAccount {
   code: string;
