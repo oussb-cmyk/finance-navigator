@@ -1,5 +1,6 @@
 import { useParams } from 'react-router-dom';
 import { useProjectStore } from '@/store/useProjectStore';
+import { useProjectMappings } from '@/hooks/useStableStoreSelectors';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -14,7 +15,7 @@ const CATEGORIES = [
 export default function MappingPage() {
   const { projectId } = useParams();
   const pid = projectId || '';
-  const mappings = useProjectStore((s) => s.mappings[pid] ?? []);
+  const mappings = useProjectMappings(pid);
   const updateMapping = useProjectStore((s) => s.updateMapping);
 
   const mapped = mappings.filter(m => m.isMapped).length;

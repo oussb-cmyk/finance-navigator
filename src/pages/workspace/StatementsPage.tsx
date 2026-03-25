@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { useProjectStore } from '@/store/useProjectStore';
+import { useProjectEntries } from '@/hooks/useStableStoreSelectors';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RefreshCw } from 'lucide-react';
 
 function useFinancials(projectId: string) {
-  const entries = useProjectStore((s) => s.entries[projectId] ?? []);
+  const entries = useProjectEntries(projectId);
 
   const sumByPrefix = (prefixes: string[], field: 'debit' | 'credit') =>
     entries.filter(e => prefixes.some(p => e.accountCode.startsWith(p))).reduce((s, e) => s + e[field], 0);

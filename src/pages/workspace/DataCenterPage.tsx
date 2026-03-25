@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { Upload, FileText, FileSpreadsheet, File, Trash2, RefreshCw, Loader2 } from 'lucide-react';
 import { useProjectStore } from '@/store/useProjectStore';
+import { useProjectFiles } from '@/hooks/useStableStoreSelectors';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { previewFile, parseFileWithMapping } from '@/lib/fileParser';
@@ -19,7 +20,7 @@ interface PendingFile {
 export default function DataCenterPage() {
   const { projectId } = useParams();
   const pid = projectId || '';
-  const files = useProjectStore((s) => s.files[pid] ?? []);
+  const files = useProjectFiles(pid);
   const addFile = useProjectStore((s) => s.addFile);
   const updateFileStatus = useProjectStore((s) => s.updateFileStatus);
   const deleteFile = useProjectStore((s) => s.deleteFile);

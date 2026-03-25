@@ -17,7 +17,8 @@ import {
 } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle2, AlertCircle, Columns } from 'lucide-react';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { CheckCircle2, AlertCircle, Columns, AlertTriangle, Info } from 'lucide-react';
 import type { PreviewData, ColumnMapping, ColumnRole } from '@/lib/fileParser';
 import { COLUMN_ROLE_LABELS } from '@/lib/fileParser';
 
@@ -43,7 +44,7 @@ export function ColumnMappingDialog({ open, onOpenChange, preview, onConfirm }: 
   };
 
   const hasFinancialColumn = !!(mapping.debit || mapping.credit || mapping.amount);
-  const isValid = mapping.date && mapping.account_code && hasFinancialColumn;
+  const isValid = mapping.date && hasFinancialColumn;
 
   const assignedColumns = useMemo(() => {
     const set = new Set<string>();
@@ -55,6 +56,9 @@ export function ColumnMappingDialog({ open, onOpenChange, preview, onConfirm }: 
     const currentVal = mapping[currentRole];
     return preview.headers.filter(h => h === currentVal || !assignedColumns.has(h));
   };
+
+  const confidencePercent = Math.round(preview.confidence * 100);
+  const isLowConfidence = preview.confidence < 0.6;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -69,23 +73,61 @@ export function ColumnMappingDialog({ open, onOpenChange, preview, onConfirm }: 
           </DialogDescription>
         </DialogHeader>
 
+        {/* Confidence & structure indicators */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <Badge variant={isLowConfidence ? 'destructive' : 'secondary'} className="text-xs">
+            Detection confidence: {confidencePercent}%
+          </Badge>
+          {preview.isHierarchical && (
+            <Badge variant="outline" className="text-xs">
+              Hierarchical ledger detected
+            </Badge>
+          )}
+          {preview.detectedAccounts.length > 0 && (
+            <Badge variant="outline" className="text-xs">
+              {preview.detectedAccounts.length} accounts found
+            </Badge>
+          )}
+        </div>
+
+        {isLowConfidence && (
+          <Alert variant="destructive" className="py-2">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription className="text-xs">
+              Low detection confidence. Please verify column assignments carefully — the file structure may be non-standard.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {preview.isHierarchical && preview.detectedAccounts.length > 0 && (
+          <Alert className="py-2">
+            <Info className="h-4 w-4" />
+            <AlertDescription className="text-xs">
+              Detected hierarchical ledger with accounts: {preview.detectedAccounts.slice(0, 5).map(a => `${a.code} ${a.name}`).join(' · ')}
+              {preview.detectedAccounts.length > 5 && ` (+${preview.detectedAccounts.length - 5} more)`}
+            </AlertDescription>
+          </Alert>
+        )}
+
         {/* Mapping controls */}
         <div className="grid grid-cols-2 gap-3 py-2">
           {ALL_ROLES.map(role => {
             const isMapped = !!mapping[role];
             const isRequired = REQUIRED_ROLES.includes(role) || (!mapping.amount && FINANCIAL_ROLES.slice(0, 2).includes(role));
+            // For hierarchical ledgers, account_code is optional (inherited from headers)
+            const effectiveRequired = isRequired && !(role === 'account_code' && preview.isHierarchical);
             return (
               <div key={role} className="flex items-center gap-2">
                 <div className="w-32 shrink-0 flex items-center gap-1.5">
                   {isMapped ? (
                     <CheckCircle2 className="h-3.5 w-3.5 text-success shrink-0" />
-                  ) : isRequired ? (
+                  ) : effectiveRequired ? (
                     <AlertCircle className="h-3.5 w-3.5 text-destructive shrink-0" />
                   ) : (
                     <div className="h-3.5 w-3.5 shrink-0" />
                   )}
                   <span className="text-xs font-medium truncate">{COLUMN_ROLE_LABELS[role]}</span>
-                  {isRequired && <Badge variant="outline" className="text-[10px] px-1 py-0">req</Badge>}
+                  {effectiveRequired && <Badge variant="outline" className="text-[10px] px-1 py-0">req</Badge>}
                 </div>
                 <Select value={mapping[role] || SKIP_VALUE} onValueChange={(v) => setRole(role, v)}>
                   <SelectTrigger className="h-8 text-xs flex-1">

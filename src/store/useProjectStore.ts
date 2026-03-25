@@ -1,6 +1,11 @@
 import { create } from 'zustand';
 import type { Project, UploadedFile, AccountMapping, JournalEntry } from '@/types/finance';
 
+// Stable empty arrays to prevent infinite re-renders from Zustand selectors
+const EMPTY_FILES: UploadedFile[] = [];
+const EMPTY_MAPPINGS: AccountMapping[] = [];
+const EMPTY_ENTRIES: JournalEntry[] = [];
+
 interface ProjectStore {
   projects: Project[];
   currentProjectId: string | null;
@@ -24,10 +29,10 @@ interface ProjectStore {
   toggleEntryValidation: (projectId: string, entryId: string) => void;
   validateAllEntries: (projectId: string) => void;
 
-  getCurrentProject: () => Project | undefined;
-  getProjectFiles: (projectId: string) => UploadedFile[];
-  getProjectMappings: (projectId: string) => AccountMapping[];
-  getProjectEntries: (projectId: string) => JournalEntry[];
+  // Stable selectors
+  getFiles: (projectId: string) => UploadedFile[];
+  getMappings: (projectId: string) => AccountMapping[];
+  getEntries: (projectId: string) => JournalEntry[];
 }
 
 const DEMO_PROJECT_ID = 'demo-1';
@@ -60,20 +65,18 @@ const demoProject2: Project = {
   unmappedAccounts: 0,
 };
 
-const demoFiles: UploadedFile[] = [];
-
-const demoMappings: AccountMapping[] = [];
-
-const demoEntries: JournalEntry[] = [];
-
 export const useProjectStore = create<ProjectStore>((set, get) => ({
   projects: [demoProject, demoProject2],
   currentProjectId: null,
-  files: { [DEMO_PROJECT_ID]: demoFiles, 'demo-2': [] },
-  mappings: { [DEMO_PROJECT_ID]: demoMappings, 'demo-2': [] },
-  entries: { [DEMO_PROJECT_ID]: demoEntries, 'demo-2': [] },
+  files: { [DEMO_PROJECT_ID]: [], 'demo-2': [] },
+  mappings: { [DEMO_PROJECT_ID]: [], 'demo-2': [] },
+  entries: { [DEMO_PROJECT_ID]: [], 'demo-2': [] },
 
-  setCurrentProject: (id) => set({ currentProjectId: id }),
+  setCurrentProject: (id) => {
+    if (get().currentProjectId !== id) {
+      set({ currentProjectId: id });
+    }
+  },
 
   addProject: (project) => set((s) => ({
     projects: [...s.projects, project],
@@ -162,12 +165,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     },
   })),
 
-  getCurrentProject: () => {
-    const s = get();
-    return s.projects.find((p) => p.id === s.currentProjectId);
-  },
-
-  getProjectFiles: (projectId) => get().files[projectId] || [],
-  getProjectMappings: (projectId) => get().mappings[projectId] || [],
-  getProjectEntries: (projectId) => get().entries[projectId] || [],
+  // Stable selectors that return the same reference for missing keys
+  getFiles: (projectId) => get().files[projectId] || EMPTY_FILES,
+  getMappings: (projectId) => get().mappings[projectId] || EMPTY_MAPPINGS,
+  getEntries: (projectId) => get().entries[projectId] || EMPTY_ENTRIES,
 }));

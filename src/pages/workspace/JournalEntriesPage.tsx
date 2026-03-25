@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useProjectStore } from '@/store/useProjectStore';
+import { useProjectEntries } from '@/hooks/useStableStoreSelectors';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,7 +12,7 @@ import type { JournalEntry } from '@/types/finance';
 export default function JournalEntriesPage() {
   const { projectId } = useParams();
   const pid = projectId || '';
-  const entries = useProjectStore((s) => s.entries[pid] ?? []);
+  const entries = useProjectEntries(pid);
   const { addEntry, deleteEntry, toggleEntryValidation, validateAllEntries } = useProjectStore();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ date: '', reference: '', description: '', accountCode: '', accountName: '', debit: '', credit: '' });
