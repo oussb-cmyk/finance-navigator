@@ -5,36 +5,58 @@ interface RawRow {
   [key: string]: unknown;
 }
 
-// Expanded column patterns for French + English accounting
+// ─── Expanded bilingual column detection patterns ──────────────────
+
 const COLUMN_PATTERNS: Record<string, RegExp[]> = {
   date: [
-    /^date$/i, /^dt$/i, /^period$/i, /^jour$/i, /^date\s*(comptable|écriture|pièce|opération)/i,
-    /^date\s*d[e']/i, /^posting\s*date/i, /^transaction\s*date/i, /^entry\s*date/i,
-    /^value\s*date/i, /^date\s*valeur/i,
+    /^date$/i, /^dt$/i, /^period$/i, /^jour$/i,
+    /^date\s*(comptable|écriture|pièce|opération|mouvement)/i,
+    /^date\s*d[e']/i, /^posting\s*date/i, /^transaction\s*date/i,
+    /^entry\s*date/i, /^value\s*date/i, /^date\s*valeur/i,
+    /^date\s*(de\s*)?saisie/i, /^date\s*effet/i,
   ],
   account_code: [
-    /^(n[°o]?\s*)?(de\s*)?(compte|account)/i, /^compte\s*(g[ée]n[ée]ral|général)?$/i,
-    /^account\s*(code|number|no|num|#)?$/i, /^acct\s*(code|no|#)?$/i,
-    /^code\s*(compte)?$/i, /^numéro/i, /^n[°o]\s*compte/i, /^general\s*account/i,
-    /^gl\s*(code|account|#)/i, /^ledger\s*(code|account)/i, /^cpt/i,
+    /^(n[°o]?\s*)?(de\s*)?(compte|account)/i,
+    /^compte\s*(g[ée]n[ée]ral|général|auxiliaire)?$/i,
+    /^account\s*(code|number|no|num|#)?$/i,
+    /^acct\s*(code|no|#)?$/i,
+    /^code\s*(compte)?$/i, /^numéro/i, /^n[°o]\s*compte/i,
+    /^general\s*account/i, /^gl\s*(code|account|#)/i,
+    /^ledger\s*(code|account)/i, /^cpt/i,
+    /^num[ée]ro\s*(de\s*)?(compte|cpt)/i,
+    /^compte\s*g[ée]n[ée]ral/i,
   ],
   account_name: [
-    /^(libellé|intitulé|nom)\s*(du\s*)?(compte)?/i, /^account\s*(name|desc|label|title)/i,
-    /^acct\s*(name|desc)/i, /^account$/i, /^intitulé$/i, /^libellé\s*compte/i,
-    /^description\s*(du\s*)?compte/i,
+    /^(libellé|intitulé|nom)\s*(du\s*)?(compte)?/i,
+    /^account\s*(name|desc|label|title)/i,
+    /^acct\s*(name|desc)/i, /^intitulé$/i,
+    /^libellé\s*compte/i, /^description\s*(du\s*)?compte/i,
+    /^désignation/i, /^intitulé\s*(du\s*)?(compte|cpt)/i,
   ],
   description: [
     /^(libellé|label|desc|description|narration|memo|detail|particulars)/i,
-    /^libellé\s*(écriture|opération|mouvement)?$/i, /^wording/i, /^text/i,
-    /^remarque/i, /^observation/i, /^motif/i,
+    /^libellé\s*(écriture|opération|mouvement)?$/i,
+    /^wording/i, /^text/i, /^remarque/i, /^observation/i, /^motif/i,
+    /^objet/i, /^commentaire/i, /^note/i,
   ],
   reference: [
-    /^(ref|référence|reference|journal|voucher|doc|pièce|jv|entry\s*#|n[°o]\s*(pièce|écriture))/i,
-    /^piece\s*(comptable)?$/i, /^folio/i, /^journal\s*(code|ref|#)?$/i,
+    /^(ref|référence|reference|journal|voucher|doc|pièce|jv|entry\s*#)/i,
+    /^n[°o]\s*(pièce|écriture)/i, /^piece\s*(comptable)?$/i,
+    /^folio/i, /^journal\s*(code|ref|#)?$/i,
+    /^n[°o]\s*(document|doc)/i,
   ],
-  debit: [/^d[ée]bit/i, /^dr$/i, /^montant\s*d[ée]bit/i, /^debit\s*amount/i],
-  credit: [/^cr[ée]dit/i, /^cr$/i, /^montant\s*cr[ée]dit/i, /^credit\s*amount/i],
-  amount: [/^(amount|montant|value|sum|solde|balance)/i],
+  debit: [
+    /^d[ée]bit/i, /^dr$/i, /^montant\s*d[ée]bit/i,
+    /^debit\s*amount/i, /^mouvement\s*d[ée]bit/i,
+  ],
+  credit: [
+    /^cr[ée]dit/i, /^cr$/i, /^montant\s*cr[ée]dit/i,
+    /^credit\s*amount/i, /^mouvement\s*cr[ée]dit/i,
+  ],
+  amount: [
+    /^(amount|montant|value|sum|solde|balance)/i,
+    /^mouvement/i,
+  ],
 };
 
 export interface ColumnMapping {
@@ -86,28 +108,180 @@ export function autoDetectColumns(headers: string[]): ColumnMapping {
   };
 }
 
-/** Normalize numbers: handles "100 000,50", "(1000)", "1,000.50", etc. */
+// ─── Pre-cleaning utilities ────────────────────────────────────────
+
+/** Normalize text: fix encoding artifacts, trim whitespace, collapse spaces */
+function normalizeText(val: unknown): string {
+  if (val == null) return '';
+  let s = String(val);
+  // Replace common encoding artifacts
+  s = s.replace(/\u00A0/g, ' ');       // non-breaking space
+  s = s.replace(/\uFEFF/g, '');        // BOM
+  s = s.replace(/\r\n/g, '\n');
+  s = s.replace(/\r/g, '\n');
+  s = s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ''); // control chars
+  s = s.replace(/\s+/g, ' ').trim();
+  return s;
+}
+
+/** Normalize all values in a row */
+function normalizeRow(row: RawRow): RawRow {
+  const out: RawRow = {};
+  for (const [k, v] of Object.entries(row)) {
+    const nk = normalizeText(k);
+    if (typeof v === 'string') {
+      out[nk] = normalizeText(v);
+    } else {
+      out[nk] = v;
+    }
+  }
+  return out;
+}
+
+function isEmptyRow(row: RawRow): boolean {
+  return Object.values(row).every(v => v == null || String(v).trim() === '');
+}
+
+/** Detect if a row looks like a header row (contains known column keywords) */
+function rowLooksLikeHeader(row: RawRow): boolean {
+  const vals = Object.values(row).map(v => normalizeText(v).toLowerCase());
+  const nonEmpty = vals.filter(v => v.length > 0);
+  if (nonEmpty.length < 2) return false;
+
+  const allPatterns = Object.values(COLUMN_PATTERNS).flat();
+  let matchCount = 0;
+  for (const v of nonEmpty) {
+    if (allPatterns.some(p => p.test(v))) matchCount++;
+  }
+  return matchCount >= 2;
+}
+
+/** Score how well a row of headers maps to our known column patterns */
+function scoreHeaderRow(headers: string[]): number {
+  const mapping = autoDetectColumns(headers);
+  let score = 0;
+  if (mapping.date) score += 2;
+  if (mapping.debit) score += 1.5;
+  if (mapping.credit) score += 1.5;
+  if (mapping.amount) score += 1;
+  if (mapping.account_code) score += 1;
+  if (mapping.account_name) score += 0.5;
+  if (mapping.description) score += 0.5;
+  if (mapping.reference) score += 0.5;
+  return score;
+}
+
+/**
+ * Pre-clean raw worksheet data:
+ * 1. Normalize text encoding
+ * 2. Remove fully empty rows
+ * 3. Detect the true header row (may not be row 0)
+ * 4. Remove merged-cell artifacts (rows where only 1 cell has data spanning multiple columns)
+ */
+function preCleanData(rawRows: RawRow[]): { headers: string[]; rows: RawRow[]; headerRowIndex: number } {
+  if (rawRows.length === 0) return { headers: [], rows: [], headerRowIndex: 0 };
+
+  // Normalize all rows
+  const normalized = rawRows.map(normalizeRow).filter(r => !isEmptyRow(r));
+  if (normalized.length === 0) return { headers: [], rows: [], headerRowIndex: 0 };
+
+  // The xlsx library uses row 0 keys as headers by default.
+  // But the real header might be further down if there are title/banner rows.
+  // Try to find the best header row in the first 15 rows.
+  const defaultHeaders = Object.keys(normalized[0]);
+  let bestHeaderScore = scoreHeaderRow(defaultHeaders);
+  let bestHeaderIdx = -1; // -1 means use default (xlsx-detected) headers
+
+  for (let i = 0; i < Math.min(15, normalized.length); i++) {
+    const vals = Object.values(normalized[i]).map(v => normalizeText(v));
+    const nonEmpty = vals.filter(v => v.length > 0);
+    if (nonEmpty.length < 2) continue;
+
+    const candidateScore = scoreHeaderRow(nonEmpty);
+    if (candidateScore > bestHeaderScore) {
+      bestHeaderScore = candidateScore;
+      bestHeaderIdx = i;
+    }
+  }
+
+  let headers: string[];
+  let dataRows: RawRow[];
+  let headerRowIndex: number;
+
+  if (bestHeaderIdx >= 0 && bestHeaderScore > scoreHeaderRow(defaultHeaders)) {
+    // Re-key rows using the detected header row
+    const headerRow = normalized[bestHeaderIdx];
+    headers = Object.values(headerRow).map(v => normalizeText(v)).filter(v => v.length > 0);
+    headerRowIndex = bestHeaderIdx;
+
+    dataRows = normalized.slice(bestHeaderIdx + 1).map(row => {
+      const vals = Object.values(row);
+      const newRow: RawRow = {};
+      headers.forEach((h, i) => {
+        newRow[h] = i < vals.length ? vals[i] : '';
+      });
+      return newRow;
+    });
+  } else {
+    headers = defaultHeaders;
+    dataRows = normalized;
+    headerRowIndex = 0;
+  }
+
+  // Remove merged-cell artifacts: rows where only 1 non-empty cell exists
+  // and it doesn't look like an account header
+  dataRows = dataRows.filter(row => {
+    const nonEmpty = Object.values(row).filter(v => normalizeText(v).length > 0);
+    if (nonEmpty.length <= 1 && nonEmpty.length > 0) {
+      const val = normalizeText(nonEmpty[0]);
+      // Keep if it looks like an account header
+      if (/^\d{3,}\s+[A-Za-zÀ-ÿ]/.test(val) || /^\d{3,}$/.test(val)) return true;
+      // Remove title/banner rows
+      return false;
+    }
+    return true;
+  });
+
+  return { headers, rows: dataRows, headerRowIndex };
+}
+
+// ─── Number and date parsing ───────────────────────────────────────
+
+/** Normalize numbers: handles "100 000,50", "(1000)", "1,000.50", "1.000,50" etc. */
 export function parseNumber(val: unknown): number {
   if (val == null || val === '') return 0;
   if (typeof val === 'number') return val;
 
-  let str = String(val).trim();
+  let str = normalizeText(val);
 
-  const isNegative = /^\(.*\)$/.test(str);
+  const isNegative = /^\(.*\)$/.test(str) || str.startsWith('-');
   str = str.replace(/[()]/g, '');
 
-  // Remove currency symbols & non-breaking spaces
-  str = str.replace(/[$€£¥₹]/g, '').replace(/\u00A0/g, ' ');
+  // Remove currency symbols
+  str = str.replace(/[$€£¥₹]/g, '').replace(/\u00A0/g, ' ').trim();
 
+  // Detect French format: "1 000,50" or "1.000,50"
   const lastComma = str.lastIndexOf(',');
   const lastDot = str.lastIndexOf('.');
 
   if (lastComma > lastDot) {
+    // Comma is decimal separator (French/European)
     str = str.replace(/[\s.]/g, '').replace(',', '.');
   } else if (lastDot > lastComma) {
+    // Dot is decimal separator (English/US)
     str = str.replace(/[\s,]/g, '');
   } else {
+    // No decimal separator, just remove spaces
     str = str.replace(/\s/g, '');
+    // Handle comma-only: "1000,50" with no dots
+    if (lastComma >= 0 && str.split(',').length === 2) {
+      const afterComma = str.split(',')[1];
+      if (afterComma.length <= 2) {
+        str = str.replace(',', '.');
+      } else {
+        str = str.replace(/,/g, '');
+      }
+    }
   }
 
   const num = parseFloat(str);
@@ -115,52 +289,107 @@ export function parseNumber(val: unknown): number {
   return isNegative ? -Math.abs(num) : num;
 }
 
-function parseDate(val: unknown): string {
-  if (!val) return new Date().toISOString().slice(0, 10);
+/** Parse date to YYYY-MM-DD format */
+export function parseDate(val: unknown): string {
+  const fallback = new Date().toISOString().slice(0, 10);
+  if (!val) return fallback;
+
   if (val instanceof Date) {
-    return isNaN(val.getTime()) ? new Date().toISOString().slice(0, 10) : val.toISOString().slice(0, 10);
+    return isNaN(val.getTime()) ? fallback : val.toISOString().slice(0, 10);
   }
+
+  // Excel serial date number
   if (typeof val === 'number') {
-    const epoch = new Date(1899, 11, 30);
-    epoch.setDate(epoch.getDate() + val);
-    return epoch.toISOString().slice(0, 10);
+    if (val > 40000 && val < 60000) {
+      const epoch = new Date(1899, 11, 30);
+      epoch.setDate(epoch.getDate() + val);
+      return epoch.toISOString().slice(0, 10);
+    }
+    return fallback;
   }
-  const s = String(val).trim();
+
+  const s = normalizeText(val);
+
+  // dd/mm/yyyy or dd-mm-yyyy or dd.mm.yyyy
   const frMatch = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/);
   if (frMatch) {
     const [, day, month, year] = frMatch;
     const d = new Date(+year, +month - 1, +day);
     if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
   }
+
+  // yyyy-mm-dd or yyyy/mm/dd
+  const isoMatch = s.match(/^(\d{4})[/\-.](\d{1,2})[/\-.](\d{1,2})$/);
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+    const d = new Date(+year, +month - 1, +day);
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  }
+
+  // dd/mm/yy
+  const shortMatch = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2})$/);
+  if (shortMatch) {
+    const [, day, month, yr] = shortMatch;
+    const year = +yr + (+yr > 50 ? 1900 : 2000);
+    const d = new Date(year, +month - 1, +day);
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  }
+
+  // Month name formats: "15 Jan 2024", "Jan 15, 2024", "15 janvier 2024"
+  const monthNames = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|janv|févr?|mars|avr|mai|juin|juil|août|sept|oct|nov|déc)/i;
+  if (monthNames.test(s)) {
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  }
+
   const d = new Date(s);
-  return isNaN(d.getTime()) ? new Date().toISOString().slice(0, 10) : d.toISOString().slice(0, 10);
+  return isNaN(d.getTime()) ? fallback : d.toISOString().slice(0, 10);
 }
 
-/** Check if a string looks like a date */
-function looksLikeDate(val: unknown): boolean {
+/** Check if a value looks like a date */
+export function looksLikeDate(val: unknown): boolean {
   if (!val) return false;
   if (val instanceof Date) return !isNaN(val.getTime());
   if (typeof val === 'number') return val > 40000 && val < 60000;
-  const s = String(val).trim();
-  return /^\d{1,2}[/\-.]?\d{1,2}[/\-.]?\d{2,4}$/.test(s) || /^\d{4}[/\-]\d{2}[/\-]\d{2}$/.test(s);
+  const s = normalizeText(val);
+  if (!s) return false;
+  // dd/mm/yyyy, dd-mm-yyyy, dd.mm.yyyy, yyyy-mm-dd, dd/mm/yy
+  if (/^\d{1,2}[/\-.]?\d{1,2}[/\-.]?\d{2,4}$/.test(s)) return true;
+  if (/^\d{4}[/\-]\d{1,2}[/\-]\d{1,2}$/.test(s)) return true;
+  // Month name formats
+  const monthNames = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|janv|févr?|mars|avr|mai|juin|juil|août|sept|déc)/i;
+  if (monthNames.test(s) && /\d{1,2}/.test(s) && /\d{4}|\d{2}/.test(s)) return true;
+  return false;
 }
 
-/** Detect if a row is a totals/summary row */
+/** Check if a value looks like a number */
+function looksLikeNumber(val: unknown): boolean {
+  if (val == null || val === '') return false;
+  if (typeof val === 'number') return true;
+  const s = normalizeText(val).replace(/[$€£¥₹\s\u00A0]/g, '').replace(/[()]/g, '');
+  return /^-?\d[\d.,\s]*$/.test(s) && s.length > 0;
+}
+
+// ─── Row classification ───────────────────────────────────────────
+
+/** Detect totals/summary rows to ignore */
 function isTotalsRow(row: RawRow): boolean {
-  const vals = Object.values(row).map(v => String(v ?? '').toLowerCase().trim());
+  const vals = Object.values(row).map(v => normalizeText(v).toLowerCase());
   return vals.some(v =>
-    /^total/i.test(v) || /^totaux/i.test(v) || /^sous[\s-]?total/i.test(v) || /^sub[\s-]?total/i.test(v) ||
-    /^grand\s*total/i.test(v) || /^solde/i.test(v) || /^totaux\s*du\s*poste/i.test(v) ||
+    /^total/i.test(v) || /^totaux/i.test(v) || /^sous[\s-]?total/i.test(v) ||
+    /^sub[\s-]?total/i.test(v) || /^grand\s*total/i.test(v) ||
+    /^solde/i.test(v) || /^totaux\s*du\s*poste/i.test(v) ||
     /^totaux\s*(g[ée]n[ée]raux|du\s*compte|du\s*journal)/i.test(v) ||
-    /^report\s*(nouveau|à\s*nouveau)/i.test(v) || /^carried\s*forward/i.test(v) ||
-    /^brought\s*forward/i.test(v) || /^balance\s*(c\/d|b\/d|carried|brought)/i.test(v) ||
+    /^report\s*(nouveau|à\s*nouveau)/i.test(v) ||
+    /^carried\s*forward/i.test(v) || /^brought\s*forward/i.test(v) ||
+    /^balance\s*(c\/d|b\/d|carried|brought)/i.test(v) ||
     v === '---' || v === '===' || v === '***'
   );
 }
 
 /** Detect repeated column header rows embedded in data */
 function isRepeatedHeaderRow(row: RawRow, originalHeaders: string[]): boolean {
-  const vals = Object.values(row).map(v => String(v ?? '').trim().toLowerCase());
+  const vals = Object.values(row).map(v => normalizeText(v).toLowerCase());
   const nonEmpty = vals.filter(v => v.length > 0);
   if (nonEmpty.length < 2) return false;
   const headerLower = originalHeaders.map(h => h.trim().toLowerCase());
@@ -168,11 +397,7 @@ function isRepeatedHeaderRow(row: RawRow, originalHeaders: string[]): boolean {
   return matchCount >= Math.min(nonEmpty.length * 0.6, 3);
 }
 
-function isEmptyRow(row: RawRow): boolean {
-  return Object.values(row).every(v => v == null || String(v).trim() === '');
-}
-
-// ─── File type detection ───────────────────────────────────────────
+// ─── Hierarchical parsing ─────────────────────────────────────────
 
 export type FileStructureType = 'tabular' | 'hierarchical';
 
@@ -198,26 +423,25 @@ export interface HierarchicalParseResult {
   unparsedRowCount: number;
 }
 
-/** Check if a value looks like a number (including formatted: "1 000,50") */
-function looksLikeNumber(val: unknown): boolean {
-  if (val == null || val === '') return false;
-  if (typeof val === 'number') return true;
-  const s = String(val).trim().replace(/[$€£¥₹\s\u00A0]/g, '').replace(/[()]/g, '');
-  return /^-?\d[\d.,\s]*$/.test(s) && s.length > 0;
-}
-
-/** Detect an account header row from raw cell values (no column mapping needed) */
+/**
+ * Detect an account header row.
+ * Account header = starts with a number (>= 3 digits), contains an account label,
+ * and does NOT contain a valid date.
+ */
 function detectAccountHeaderFromValues(values: string[]): { code: string; name: string } | null {
-  // Check each cell for "123456 Account Name" pattern
+  const hasDate = values.some(v => looksLikeDate(v.trim()));
+  if (hasDate) return null; // Account headers should NOT contain dates
+
   for (const v of values) {
     const s = v.trim();
+    // Pattern: "123456 Account Name" (code >= 3 digits followed by text)
     const match = s.match(/^(\d{3,})\s+([A-Za-zÀ-ÿ].+)/);
     if (match) {
       return { code: match[1], name: match[2].trim() };
     }
   }
 
-  // Check if first cell is a pure account code and second cell is a name
+  // Check if first cell = pure account code, second cell = name
   if (values.length >= 2) {
     const first = values[0].trim();
     const second = values[1].trim();
@@ -263,23 +487,18 @@ function extractTransactionFromValues(values: string[]): {
     }
   }
 
-  // Must have a date to be a transaction
   if (!dateVal) return null;
-  // Must have at least one amount
   if (amounts.length === 0) return null;
 
   let debit = 0;
   let credit = 0;
 
   if (amounts.length === 1) {
-    // Single amount — positive = debit, negative = credit
     if (amounts[0] >= 0) debit = amounts[0];
     else credit = Math.abs(amounts[0]);
   } else if (amounts.length >= 2) {
-    // Assume debit, credit order (most common in GL formats)
     debit = Math.abs(amounts[0]);
     credit = Math.abs(amounts[1]);
-    // If one is zero, fine; if both nonzero, keep as-is
   }
 
   if (debit === 0 && credit === 0) return null;
@@ -300,7 +519,6 @@ export function detectFileStructure(rows: RawRow[], headers: string[]): {
   const mapping = autoDetectColumns(headers);
   const tabularScore = computeConfidence(mapping, rows);
 
-  // Count hierarchical signals
   let accountHeaders = 0;
   let transactionRows = 0;
   let totalRows = 0;
@@ -309,16 +527,15 @@ export function detectFileStructure(rows: RawRow[], headers: string[]): {
     if (isEmptyRow(row)) continue;
     totalRows++;
 
-    const values = Object.values(row).map(v => String(v ?? ''));
+    const values = Object.values(row).map(v => normalizeText(v));
     const acctHeader = detectAccountHeaderFromValues(values);
     if (acctHeader) {
       accountHeaders++;
       continue;
     }
 
-    // Check for transaction-like rows (date + amount)
-    const hasDate = values.some(v => looksLikeDate(v.trim()));
-    const hasAmount = values.some(v => looksLikeNumber(v.trim()) && parseNumber(v.trim()) !== 0);
+    const hasDate = values.some(v => looksLikeDate(v));
+    const hasAmount = values.some(v => looksLikeNumber(v) && parseNumber(v) !== 0);
     if (hasDate && hasAmount) transactionRows++;
   }
 
@@ -326,18 +543,18 @@ export function detectFileStructure(rows: RawRow[], headers: string[]): {
     ? (accountHeaders >= 2 && transactionRows >= 3) ? 1 : (accountHeaders / totalRows) * 3
     : 0;
 
-  // If tabular detection is strong, prefer it
   if (tabularScore >= 0.8 && hierarchicalSignal < 0.5) {
     return { type: 'tabular', confidence: tabularScore };
   }
 
-  // If hierarchical signals are strong
   if (hierarchicalSignal >= 0.5 && accountHeaders >= 2) {
     return { type: 'hierarchical', confidence: Math.min(hierarchicalSignal, 1) };
   }
 
-  // Low confidence either way — default to tabular (user can switch)
-  return { type: tabularScore >= hierarchicalSignal ? 'tabular' : 'hierarchical', confidence: Math.max(tabularScore, hierarchicalSignal) };
+  return {
+    type: tabularScore >= hierarchicalSignal ? 'tabular' : 'hierarchical',
+    confidence: Math.max(tabularScore, hierarchicalSignal),
+  };
 }
 
 /** Parse a file in hierarchical mode (no column mapping needed) */
@@ -352,9 +569,11 @@ export function parseHierarchical(rows: RawRow[]): HierarchicalParseResult {
     if (isEmptyRow(row)) return;
     if (isTotalsRow(row)) return;
 
-    const values = Object.values(row).map(v => String(v ?? ''));
+    const values = Object.values(row).map(v => normalizeText(v));
 
-    // Check for account header
+    // Check for repeated header rows embedded in data
+    if (rowLooksLikeHeader(row)) return;
+
     const acctHeader = detectAccountHeaderFromValues(values);
     if (acctHeader) {
       currentAccount = acctHeader;
@@ -364,7 +583,6 @@ export function parseHierarchical(rows: RawRow[]): HierarchicalParseResult {
       return;
     }
 
-    // Try to extract a transaction
     const tx = extractTransactionFromValues(values);
     if (tx) {
       const accountCode = currentAccount?.code || 'UNKNOWN';
@@ -382,11 +600,9 @@ export function parseHierarchical(rows: RawRow[]): HierarchicalParseResult {
       return;
     }
 
-    // Not empty, not total, not header, not transaction → unparsed
     unparsedRowCount++;
   });
 
-  // Update transaction counts on accounts
   for (const acct of accounts) {
     acct.transactionCount = accountTxCounts.get(acct.code) || 0;
   }
@@ -394,7 +610,7 @@ export function parseHierarchical(rows: RawRow[]): HierarchicalParseResult {
   return { accounts, transactions, unparsedRowCount };
 }
 
-// ─── Existing tabular types ────────────────────────────────────────
+// ─── Preview & tabular types ──────────────────────────────────────
 
 export interface PreviewData {
   headers: string[];
@@ -404,9 +620,7 @@ export interface PreviewData {
   confidence: number;
   detectedAccounts: DetectedAccount[];
   isHierarchical: boolean;
-  /** The detected structure type */
   structureType: FileStructureType;
-  /** Hierarchical parse result (populated only when structureType === 'hierarchical') */
   hierarchicalResult: HierarchicalParseResult | null;
 }
 
@@ -416,7 +630,7 @@ export interface ParseResult {
   entriesExtracted: number;
 }
 
-/** Compute confidence score for the auto-detected mapping */
+/** Compute confidence score for the auto-detected column mapping */
 function computeConfidence(mapping: ColumnMapping, rows: RawRow[]): number {
   let score = 0;
   const total = 5;
@@ -437,37 +651,47 @@ function computeConfidence(mapping: ColumnMapping, rows: RawRow[]): number {
   return score / total;
 }
 
-/** Read file and return preview data with structure detection */
+/** Read file and return preview data with structure detection + pre-cleaning */
 export async function previewFile(file: File): Promise<PreviewData> {
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
   const sheetName = workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
-  const rows: RawRow[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+  const rawRows: RawRow[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 
-  if (!rows.length) return {
+  if (!rawRows.length) return {
     headers: [], rows: [], suggestedMapping: autoDetectColumns([]),
     fileName: file.name, confidence: 0, detectedAccounts: [], isHierarchical: false,
     structureType: 'tabular', hierarchicalResult: null,
   };
 
-  const headers = Object.keys(rows[0]);
+  // Pre-clean: normalize, find true header, remove artifacts
+  const { headers, rows: cleanedRows } = preCleanData(rawRows);
+
+  if (headers.length === 0 || cleanedRows.length === 0) {
+    return {
+      headers: [], rows: [], suggestedMapping: autoDetectColumns([]),
+      fileName: file.name, confidence: 0, detectedAccounts: [], isHierarchical: false,
+      structureType: 'tabular', hierarchicalResult: null,
+    };
+  }
+
   const suggestedMapping = autoDetectColumns(headers);
-  const { type: structureType, confidence: structConfidence } = detectFileStructure(rows, headers);
+  const { type: structureType, confidence: structConfidence } = detectFileStructure(cleanedRows, headers);
 
   let hierarchicalResult: HierarchicalParseResult | null = null;
   let detectedAccounts: DetectedAccount[] = [];
 
   if (structureType === 'hierarchical') {
-    hierarchicalResult = parseHierarchical(rows);
+    hierarchicalResult = parseHierarchical(cleanedRows);
     detectedAccounts = hierarchicalResult.accounts;
   }
 
   const confidence = structureType === 'tabular'
-    ? computeConfidence(suggestedMapping, rows)
+    ? computeConfidence(suggestedMapping, cleanedRows)
     : structConfidence;
 
-  const previewRows = rows.filter(r => !isEmptyRow(r)).slice(0, 20);
+  const previewRows = cleanedRows.filter(r => !isEmptyRow(r)).slice(0, 20);
 
   return {
     headers,
@@ -523,14 +747,16 @@ export async function parseFileWithMapping(file: File, mapping: ColumnMapping): 
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
   const sheetName = workbook.SheetNames[0];
   const sheet = workbook.Sheets[sheetName];
-  const rows: RawRow[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+  const rawRows: RawRow[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 
-  if (!rows.length) return { entries: [], mappings: [], entriesExtracted: 0 };
+  if (!rawRows.length) return { entries: [], mappings: [], entriesExtracted: 0 };
 
-  const headers = Object.keys(rows[0]);
+  // Pre-clean the data
+  const { headers, rows } = preCleanData(rawRows);
+  if (rows.length === 0) return { entries: [], mappings: [], entriesExtracted: 0 };
+
   const entries: JournalEntry[] = [];
   const accountSet = new Map<string, string>();
-
   let currentAccount: { code: string; name: string } | null = null;
 
   rows.forEach((row, idx) => {
@@ -538,7 +764,6 @@ export async function parseFileWithMapping(file: File, mapping: ColumnMapping): 
     if (isTotalsRow(row)) return;
     if (isRepeatedHeaderRow(row, headers)) return;
 
-    // Check if this is an account header row (using column-mapping-aware detection)
     const vals = Object.values(row);
     let hasAmount = false;
     if (mapping.debit) hasAmount = hasAmount || parseNumber(row[mapping.debit]) !== 0;
@@ -546,8 +771,7 @@ export async function parseFileWithMapping(file: File, mapping: ColumnMapping): 
     if (mapping.amount) hasAmount = hasAmount || parseNumber(row[mapping.amount]) !== 0;
 
     if (!hasAmount && !(mapping.date && looksLikeDate(row[mapping.date]))) {
-      // Might be an account header
-      const headerValues = vals.map(v => String(v ?? ''));
+      const headerValues = vals.map(v => normalizeText(v));
       const headerAccount = detectAccountHeaderFromValues(headerValues);
       if (headerAccount) {
         currentAccount = headerAccount;
@@ -572,10 +796,10 @@ export async function parseFileWithMapping(file: File, mapping: ColumnMapping): 
 
     if (debit === 0 && credit === 0) return;
 
-    let accountCode = mapping.account_code ? String(row[mapping.account_code] ?? '').trim() : '';
+    let accountCode = mapping.account_code ? normalizeText(row[mapping.account_code]).trim() : '';
     let accountName = mapping.account_name
-      ? String(row[mapping.account_name] ?? '').trim()
-      : (mapping.description ? String(row[mapping.description] ?? '').trim() : '');
+      ? normalizeText(row[mapping.account_name]).trim()
+      : (mapping.description ? normalizeText(row[mapping.description]).trim() : '');
 
     if (!accountCode && currentAccount) {
       accountCode = currentAccount.code;
@@ -592,8 +816,8 @@ export async function parseFileWithMapping(file: File, mapping: ColumnMapping): 
     entries.push({
       id: `e-${Date.now()}-${idx}`,
       date: parseDate(mapping.date ? row[mapping.date] : ''),
-      reference: mapping.reference ? String(row[mapping.reference] ?? '').trim() : `JE-${String(idx + 1).padStart(3, '0')}`,
-      description: mapping.description ? String(row[mapping.description] ?? '').trim() : accountName,
+      reference: mapping.reference ? normalizeText(row[mapping.reference]).trim() : `JE-${String(idx + 1).padStart(3, '0')}`,
+      description: mapping.description ? normalizeText(row[mapping.description]).trim() : accountName,
       accountCode,
       accountName,
       debit,
@@ -626,18 +850,21 @@ export async function parseFile(file: File): Promise<ParseResult> {
   return parseFileWithMapping(file, preview.suggestedMapping);
 }
 
+// ─── Account type guessing (French PCG + English) ─────────────────
+
 function guessAccountType(code: string, name: string): AccountMapping['type'] {
   const n = name.toLowerCase();
   const c = parseInt(code);
 
+  // French Plan Comptable Général classification
   if (!isNaN(c)) {
-    if (c >= 1000 && c < 2000) return 'asset';
-    if (c >= 2000 && c < 3000) return 'asset';
-    if (c >= 3000 && c < 4000) return 'asset';
-    if (c >= 4000 && c < 5000) return 'liability';
-    if (c >= 5000 && c < 6000) return 'asset';
-    if (c >= 6000 && c < 7000) return 'expense';
-    if (c >= 7000 && c < 8000) return 'revenue';
+    if (c >= 1000 && c < 2000) return 'equity';     // Class 1: Capitaux
+    if (c >= 2000 && c < 3000) return 'asset';       // Class 2: Immobilisations
+    if (c >= 3000 && c < 4000) return 'asset';       // Class 3: Stocks
+    if (c >= 4000 && c < 5000) return 'liability';   // Class 4: Tiers
+    if (c >= 5000 && c < 6000) return 'asset';       // Class 5: Financiers
+    if (c >= 6000 && c < 7000) return 'expense';     // Class 6: Charges
+    if (c >= 7000 && c < 8000) return 'revenue';     // Class 7: Produits
   }
 
   if (/chiffre\s*d'affaires|ventes?|produits?|recettes?|revenue|sales|income/i.test(n)) return 'revenue';
