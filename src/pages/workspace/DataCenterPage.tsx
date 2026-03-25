@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { Upload, FileText, FileSpreadsheet, File, Trash2, RefreshCw, Loader2 } from 'lucide-react';
+import { Upload, FileText, FileSpreadsheet, File, Trash2, RefreshCw, Loader2, AlertTriangle } from 'lucide-react';
 import { useProjectStore } from '@/store/useProjectStore';
 import { useLearningStore, generateFileFingerprint } from '@/store/useLearningStore';
 import type { CorrectionRecord } from '@/store/useLearningStore';
@@ -8,12 +8,14 @@ import { useProjectFiles } from '@/hooks/useStableStoreSelectors';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { previewFile, parseFileWithMapping, hierarchicalToParseResult } from '@/lib/fileParser';
-import type { PreviewData, ColumnMapping, HierarchicalTransaction, DetectedAccount } from '@/lib/fileParser';
+import type { PreviewData, ColumnMapping, HierarchicalTransaction, DetectedAccount, ReportDetectionResult } from '@/lib/fileParser';
 import { computeRowConfidence } from '@/lib/confidenceScoring';
 import type { ScoredRow } from '@/lib/confidenceScoring';
 import { ColumnMappingDialog } from '@/components/workspace/ColumnMappingDialog';
 import { HierarchicalPreviewDialog } from '@/components/workspace/HierarchicalPreviewDialog';
 import { ReviewValidationDialog } from '@/components/workspace/ReviewValidationDialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import type { UploadedFile } from '@/types/finance';
 
@@ -43,7 +45,7 @@ export default function DataCenterPage() {
   const [rawFiles, setRawFiles] = useState<Map<string, globalThis.File>>(new Map());
 
   const [pendingFile, setPendingFile] = useState<PendingFile | null>(null);
-  const [dialogMode, setDialogMode] = useState<'tabular' | 'hierarchical' | null>(null);
+  const [dialogMode, setDialogMode] = useState<'tabular' | 'hierarchical' | 'report' | null>(null);
 
   // Review dialog state
   const [reviewRows, setReviewRows] = useState<ScoredRow[] | null>(null);
@@ -72,6 +74,15 @@ export default function DataCenterPage() {
       if (type === 'xlsx' || type === 'csv') {
         try {
           const preview = await previewFile(f);
+
+          // Handle report-style files with no extractable data
+          if (preview.structureType === 'report' && preview.headers.length === 0) {
+            updateFileStatus(projectId, fileId, 'error');
+            setPendingFile({ fileId, rawFile: f, preview });
+            setDialogMode('report');
+            continue;
+          }
+
           if (preview.headers.length === 0) {
             updateFileStatus(projectId, fileId, 'error');
             toast.error(`No data found in ${f.name}`);
@@ -79,17 +90,23 @@ export default function DataCenterPage() {
           }
 
           // Save file fingerprint for future pattern matching
-          const fpId = generateFileFingerprint(preview.headers, preview.structureType);
+          const fpType = preview.structureType === 'report' ? 'tabular' as const : preview.structureType;
+          const fpId = generateFileFingerprint(preview.headers, fpType);
           saveFileFingerprint(projectId, {
             id: fpId,
-            structureType: preview.structureType,
-            columnMapping: preview.structureType === 'tabular' ? preview.suggestedMapping as unknown as Record<string, string | null> : undefined,
+            structureType: fpType === 'hierarchical' ? 'hierarchical' : 'tabular',
+            columnMapping: fpType === 'tabular' ? preview.suggestedMapping as unknown as Record<string, string | null> : undefined,
             matchCount: 1,
             lastUsed: Date.now(),
           });
 
+          // Report files with extracted data: show as tabular with a toast warning
+          if (preview.structureType === 'report' && preview.reportInfo) {
+            toast.info(`Report-style layout detected in ${f.name}. Data table was auto-extracted.`, { duration: 5000 });
+          }
+
           setPendingFile({ fileId, rawFile: f, preview });
-          setDialogMode(preview.structureType);
+          setDialogMode(preview.structureType === 'report' ? 'tabular' : preview.structureType);
         } catch (err) {
           updateFileStatus(projectId, fileId, 'error');
           toast.error(`Failed to read ${f.name}: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -263,12 +280,17 @@ export default function DataCenterPage() {
     }
     try {
       const preview = await previewFile(raw);
+      if (preview.structureType === 'report' && preview.headers.length === 0) {
+        setPendingFile({ fileId, rawFile: raw, preview });
+        setDialogMode('report');
+        return;
+      }
       if (preview.headers.length === 0) {
         toast.error('No data found in file.');
         return;
       }
       setPendingFile({ fileId, rawFile: raw, preview });
-      setDialogMode(preview.structureType);
+      setDialogMode(preview.structureType === 'report' ? 'tabular' : preview.structureType);
     } catch {
       toast.error('Failed to read file.');
     }
@@ -391,6 +413,66 @@ export default function DataCenterPage() {
           onConfirm={handleHierarchicalConfirm}
           onFallbackToMapping={handleFallbackToMapping}
         />
+      )}
+
+      {/* Report-style file warning dialog */}
+      {pendingFile && dialogMode === 'report' && (
+        <Dialog open onOpenChange={(open) => { if (!open) closePending(); }}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-warning" />
+                Report-Style File Detected
+              </DialogTitle>
+              <DialogDescription>
+                This file appears to be a formatted report, not a data export.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <Alert variant="destructive">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Unable to extract structured data</AlertTitle>
+                <AlertDescription>
+                  The file contains visual formatting (titles, merged cells, inconsistent columns) that prevents reliable data extraction.
+                </AlertDescription>
+              </Alert>
+              {pendingFile.preview.reportInfo && pendingFile.preview.reportInfo.reasons.length > 0 && (
+                <div className="bg-muted rounded-lg p-3 text-sm space-y-1">
+                  <p className="font-medium text-muted-foreground">Detection details:</p>
+                  <ul className="list-disc list-inside text-muted-foreground">
+                    {pendingFile.preview.reportInfo.reasons.map((r, i) => (
+                      <li key={i}>{r}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <div className="bg-muted/50 rounded-lg p-3 text-sm text-muted-foreground">
+                <p className="font-medium mb-1">Suggestions:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>Export the data as a structured table from your accounting software</li>
+                  <li>Use CSV or plain Excel format without visual formatting</li>
+                  <li>Remove merged cells, titles, and banners before uploading</li>
+                </ul>
+              </div>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => {
+                // Try forcing tabular mapping anyway
+                if (pendingFile.preview.headers.length > 0) {
+                  setDialogMode('tabular');
+                } else {
+                  closePending();
+                  toast.error('No columns could be detected. Please upload a structured export.');
+                }
+              }}>
+                Try Manual Mapping
+              </Button>
+              <Button variant="default" onClick={closePending}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
 
       {/* Review & Validation dialog */}

@@ -114,12 +114,11 @@ export function autoDetectColumns(headers: string[]): ColumnMapping {
 function normalizeText(val: unknown): string {
   if (val == null) return '';
   let s = String(val);
-  // Replace common encoding artifacts
-  s = s.replace(/\u00A0/g, ' ');       // non-breaking space
-  s = s.replace(/\uFEFF/g, '');        // BOM
+  s = s.replace(/\u00A0/g, ' ');
+  s = s.replace(/\uFEFF/g, '');
   s = s.replace(/\r\n/g, '\n');
   s = s.replace(/\r/g, '\n');
-  s = s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, ''); // control chars
+  s = s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
   s = s.replace(/\s+/g, ' ').trim();
   return s;
 }
@@ -171,32 +170,261 @@ function scoreHeaderRow(headers: string[]): number {
   return score;
 }
 
+// ─── Report-style layout detection ────────────────────────────────
+
+/** Detect report-style files: merged cells, titles, misaligned columns */
+export interface ReportDetectionResult {
+  isReport: boolean;
+  confidence: number;
+  titleRows: number;
+  tableStartRow: number;
+  reasons: string[];
+}
+
+const REPORT_TITLE_PATTERNS = [
+  /grand[\s-]*livre/i,
+  /general\s*ledger/i,
+  /balance\s*(g[ée]n[ée]rale|sheet)/i,
+  /journal\s*(g[ée]n[ée]ral|entries)/i,
+  /compte\s*de\s*r[ée]sultat/i,
+  /income\s*statement/i,
+  /profit\s*(and|&)\s*loss/i,
+  /trial\s*balance/i,
+  /bilan/i,
+  /r[ée]capitulatif/i,
+  /situation\s*(comptable|financi[èe]re)/i,
+  /état\s*(financier|comptable|de\s*rapprochement)/i,
+  /rapport/i,
+  /summary/i,
+  /report/i,
+];
+
+function detectReportLayout(rawRows: RawRow[]): ReportDetectionResult {
+  const reasons: string[] = [];
+  let reportScore = 0;
+  let titleRows = 0;
+  let tableStartRow = 0;
+
+  if (rawRows.length === 0) {
+    return { isReport: false, confidence: 0, titleRows: 0, tableStartRow: 0, reasons: [] };
+  }
+
+  // Analyze the first 25 rows for report indicators
+  const scanLimit = Math.min(25, rawRows.length);
+
+  // 1. Check for title/banner rows at the top (single-cell or very sparse rows)
+  let topSparseRows = 0;
+  for (let i = 0; i < scanLimit; i++) {
+    const row = rawRows[i];
+    const vals = Object.values(row).map(v => normalizeText(v));
+    const nonEmpty = vals.filter(v => v.length > 0);
+
+    if (nonEmpty.length <= 2 && nonEmpty.length > 0) {
+      const text = nonEmpty.join(' ');
+      // Check for report title patterns
+      if (REPORT_TITLE_PATTERNS.some(p => p.test(text))) {
+        reportScore += 3;
+        reasons.push(`Report title detected: "${text.slice(0, 60)}"`);
+      }
+      // Long text in a single cell = likely a merged title
+      if (nonEmpty.length === 1 && text.length > 15) {
+        topSparseRows++;
+      }
+    }
+
+    if (topSparseRows > 0 && nonEmpty.length >= 3) {
+      break; // found end of title area
+    }
+  }
+
+  if (topSparseRows >= 2) {
+    reportScore += 2;
+    titleRows = topSparseRows;
+    reasons.push(`${topSparseRows} title/metadata rows detected`);
+  }
+
+  // 2. Check for inconsistent column counts (sign of merged cells / report formatting)
+  const colCounts: number[] = [];
+  for (let i = 0; i < scanLimit; i++) {
+    const row = rawRows[i];
+    const nonEmpty = Object.values(row).filter(v => normalizeText(v).length > 0).length;
+    if (nonEmpty > 0) colCounts.push(nonEmpty);
+  }
+  if (colCounts.length >= 5) {
+    const median = colCounts.slice().sort((a, b) => a - b)[Math.floor(colCounts.length / 2)];
+    const inconsistent = colCounts.filter(c => Math.abs(c - median) > 2).length;
+    if (inconsistent > colCounts.length * 0.3) {
+      reportScore += 2;
+      reasons.push('Inconsistent column alignment detected');
+    }
+  }
+
+  // 3. Check for rows with "Total compte", "Totaux du poste", etc. scattered through the file
+  let totalRowCount = 0;
+  for (const row of rawRows.slice(0, Math.min(100, rawRows.length))) {
+    if (isTotalsRow(row)) totalRowCount++;
+  }
+  if (totalRowCount >= 3) {
+    reportScore += 1;
+    reasons.push(`${totalRowCount} summary/total rows found`);
+  }
+
+  // 4. Find the table start: first row where we see repeated numeric patterns
+  tableStartRow = findTableStartRow(rawRows);
+
+  const isReport = reportScore >= 3;
+
+  return {
+    isReport,
+    confidence: Math.min(reportScore / 6, 1),
+    titleRows,
+    tableStartRow,
+    reasons,
+  };
+}
+
+/** Find the row index where actual tabular data begins */
+function findTableStartRow(rows: RawRow[]): number {
+  const scanLimit = Math.min(30, rows.length);
+
+  // Look for the first row that has both a date-like value and a number-like value,
+  // or the first header-like row
+  for (let i = 0; i < scanLimit; i++) {
+    const row = rows[i];
+    const vals = Object.values(row).map(v => normalizeText(v));
+    const nonEmpty = vals.filter(v => v.length > 0);
+
+    // If it looks like a header row, data starts after it
+    if (nonEmpty.length >= 3 && rowLooksLikeHeader(row)) {
+      return i;
+    }
+
+    // If it has date + number, it's likely data (table may have started 1 row before with headers)
+    if (nonEmpty.length >= 3) {
+      const hasDate = vals.some(v => looksLikeDate(v));
+      const hasNumber = vals.some(v => looksLikeNumber(v) && parseNumber(v) !== 0);
+      if (hasDate && hasNumber && i > 0) {
+        // Check if the previous row might be a header
+        const prevVals = Object.values(rows[i - 1]).map(v => normalizeText(v));
+        const prevNonEmpty = prevVals.filter(v => v.length > 0);
+        if (prevNonEmpty.length >= 3) return i - 1;
+        return i;
+      }
+    }
+  }
+
+  return 0;
+}
+
+/** Extract the table zone from a report-style file */
+function extractTableFromReport(rawRows: RawRow[], tableStartRow: number): {
+  headers: string[];
+  rows: RawRow[];
+  headerRowIndex: number;
+} {
+  if (tableStartRow >= rawRows.length) {
+    return { headers: [], rows: [], headerRowIndex: 0 };
+  }
+
+  // Slice from table start
+  const relevantRows = rawRows.slice(tableStartRow);
+  if (relevantRows.length === 0) return { headers: [], rows: [], headerRowIndex: 0 };
+
+  // Try to find the header row within the first few rows of the table zone
+  let bestScore = 0;
+  let bestIdx = 0;
+
+  for (let i = 0; i < Math.min(5, relevantRows.length); i++) {
+    const vals = Object.values(relevantRows[i]).map(v => normalizeText(v));
+    const nonEmpty = vals.filter(v => v.length > 0);
+    if (nonEmpty.length < 2) continue;
+    const score = scoreHeaderRow(nonEmpty);
+    if (score > bestScore) {
+      bestScore = score;
+      bestIdx = i;
+    }
+  }
+
+  // Use the detected header row
+  const headerRow = relevantRows[bestIdx];
+  const headers = Object.values(headerRow)
+    .map(v => normalizeText(v))
+    .filter(v => v.length > 0);
+
+  if (headers.length < 2) {
+    // Fallback: use original keys
+    return { headers: Object.keys(relevantRows[0]), rows: relevantRows, headerRowIndex: tableStartRow };
+  }
+
+  // Re-key subsequent rows with the new headers
+  const dataRows = relevantRows.slice(bestIdx + 1)
+    .filter(r => !isEmptyRow(r))
+    .map(row => {
+      const vals = Object.values(row);
+      const newRow: RawRow = {};
+      headers.forEach((h, i) => {
+        newRow[h] = i < vals.length ? vals[i] : '';
+      });
+      return newRow;
+    })
+    .filter(r => !isEmptyRow(r));
+
+  // Remove total/summary rows and repeated headers
+  const cleanRows = dataRows.filter(r => {
+    if (isTotalsRow(r)) return false;
+    if (isRepeatedHeaderRow(r, headers)) return false;
+    return true;
+  });
+
+  return { headers, rows: cleanRows, headerRowIndex: tableStartRow + bestIdx };
+}
+
 /**
  * Pre-clean raw worksheet data:
  * 1. Normalize text encoding
  * 2. Remove fully empty rows
- * 3. Detect the true header row (may not be row 0)
- * 4. Remove merged-cell artifacts (rows where only 1 cell has data spanning multiple columns)
+ * 3. Detect report-style layout and extract table zone if needed
+ * 4. Detect the true header row (may not be row 0)
+ * 5. Remove merged-cell artifacts
  */
-function preCleanData(rawRows: RawRow[]): { headers: string[]; rows: RawRow[]; headerRowIndex: number } {
-  if (rawRows.length === 0) return { headers: [], rows: [], headerRowIndex: 0 };
+function preCleanData(rawRows: RawRow[]): {
+  headers: string[];
+  rows: RawRow[];
+  headerRowIndex: number;
+  reportInfo: ReportDetectionResult | null;
+} {
+  if (rawRows.length === 0) return { headers: [], rows: [], headerRowIndex: 0, reportInfo: null };
 
   // Normalize all rows
   const normalized = rawRows.map(normalizeRow).filter(r => !isEmptyRow(r));
-  if (normalized.length === 0) return { headers: [], rows: [], headerRowIndex: 0 };
+  if (normalized.length === 0) return { headers: [], rows: [], headerRowIndex: 0, reportInfo: null };
 
-  // The xlsx library uses row 0 keys as headers by default.
-  // But the real header might be further down if there are title/banner rows.
-  // Try to find the best header row in the first 15 rows.
+  // Detect report-style layout
+  const reportInfo = detectReportLayout(normalized);
+
+  // If report-style, extract the table zone first
+  if (reportInfo.isReport && reportInfo.tableStartRow > 0) {
+    const extracted = extractTableFromReport(normalized, reportInfo.tableStartRow);
+    if (extracted.headers.length >= 2 && extracted.rows.length > 0) {
+      return {
+        headers: extracted.headers,
+        rows: extracted.rows,
+        headerRowIndex: extracted.headerRowIndex,
+        reportInfo,
+      };
+    }
+    // If extraction failed, fall through to standard cleaning
+  }
+
+  // Standard header detection (same as before)
   const defaultHeaders = Object.keys(normalized[0]);
   let bestHeaderScore = scoreHeaderRow(defaultHeaders);
-  let bestHeaderIdx = -1; // -1 means use default (xlsx-detected) headers
+  let bestHeaderIdx = -1;
 
   for (let i = 0; i < Math.min(15, normalized.length); i++) {
     const vals = Object.values(normalized[i]).map(v => normalizeText(v));
     const nonEmpty = vals.filter(v => v.length > 0);
     if (nonEmpty.length < 2) continue;
-
     const candidateScore = scoreHeaderRow(nonEmpty);
     if (candidateScore > bestHeaderScore) {
       bestHeaderScore = candidateScore;
@@ -209,7 +437,6 @@ function preCleanData(rawRows: RawRow[]): { headers: string[]; rows: RawRow[]; h
   let headerRowIndex: number;
 
   if (bestHeaderIdx >= 0 && bestHeaderScore > scoreHeaderRow(defaultHeaders)) {
-    // Re-key rows using the detected header row
     const headerRow = normalized[bestHeaderIdx];
     headers = Object.values(headerRow).map(v => normalizeText(v)).filter(v => v.length > 0);
     headerRowIndex = bestHeaderIdx;
@@ -228,21 +455,18 @@ function preCleanData(rawRows: RawRow[]): { headers: string[]; rows: RawRow[]; h
     headerRowIndex = 0;
   }
 
-  // Remove merged-cell artifacts: rows where only 1 non-empty cell exists
-  // and it doesn't look like an account header
+  // Remove merged-cell artifacts
   dataRows = dataRows.filter(row => {
     const nonEmpty = Object.values(row).filter(v => normalizeText(v).length > 0);
     if (nonEmpty.length <= 1 && nonEmpty.length > 0) {
       const val = normalizeText(nonEmpty[0]);
-      // Keep if it looks like an account header
       if (/^\d{3,}\s+[A-Za-zÀ-ÿ]/.test(val) || /^\d{3,}$/.test(val)) return true;
-      // Remove title/banner rows
       return false;
     }
     return true;
   });
 
-  return { headers, rows: dataRows, headerRowIndex };
+  return { headers, rows: dataRows, headerRowIndex, reportInfo };
 }
 
 // ─── Number and date parsing ───────────────────────────────────────
@@ -399,7 +623,7 @@ function isRepeatedHeaderRow(row: RawRow, originalHeaders: string[]): boolean {
 
 // ─── Hierarchical parsing ─────────────────────────────────────────
 
-export type FileStructureType = 'tabular' | 'hierarchical';
+export type FileStructureType = 'tabular' | 'hierarchical' | 'report';
 
 export interface DetectedAccount {
   code: string;
@@ -622,6 +846,7 @@ export interface PreviewData {
   isHierarchical: boolean;
   structureType: FileStructureType;
   hierarchicalResult: HierarchicalParseResult | null;
+  reportInfo: ReportDetectionResult | null;
 }
 
 export interface ParseResult {
@@ -659,35 +884,42 @@ export async function previewFile(file: File): Promise<PreviewData> {
   const sheet = workbook.Sheets[sheetName];
   const rawRows: RawRow[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 
-  if (!rawRows.length) return {
+  const emptyResult: PreviewData = {
     headers: [], rows: [], suggestedMapping: autoDetectColumns([]),
     fileName: file.name, confidence: 0, detectedAccounts: [], isHierarchical: false,
-    structureType: 'tabular', hierarchicalResult: null,
+    structureType: 'tabular', hierarchicalResult: null, reportInfo: null,
   };
 
-  // Pre-clean: normalize, find true header, remove artifacts
-  const { headers, rows: cleanedRows } = preCleanData(rawRows);
+  if (!rawRows.length) return emptyResult;
+
+  // Pre-clean: normalize, find true header, detect report layout, remove artifacts
+  const { headers, rows: cleanedRows, reportInfo } = preCleanData(rawRows);
 
   if (headers.length === 0 || cleanedRows.length === 0) {
-    return {
-      headers: [], rows: [], suggestedMapping: autoDetectColumns([]),
-      fileName: file.name, confidence: 0, detectedAccounts: [], isHierarchical: false,
-      structureType: 'tabular', hierarchicalResult: null,
-    };
+    // If report was detected but table extraction failed, return report info for UI feedback
+    if (reportInfo?.isReport) {
+      return { ...emptyResult, reportInfo, structureType: 'report' };
+    }
+    return emptyResult;
   }
 
   const suggestedMapping = autoDetectColumns(headers);
-  const { type: structureType, confidence: structConfidence } = detectFileStructure(cleanedRows, headers);
+  const { type: detectedType, confidence: structConfidence } = detectFileStructure(cleanedRows, headers);
+
+  // If report was detected AND table was successfully extracted, treat as the detected sub-type
+  const structureType: FileStructureType = reportInfo?.isReport && detectedType === 'tabular'
+    ? (structConfidence < 0.4 ? 'report' : detectedType)
+    : detectedType;
 
   let hierarchicalResult: HierarchicalParseResult | null = null;
   let detectedAccounts: DetectedAccount[] = [];
 
-  if (structureType === 'hierarchical') {
+  if (structureType === 'hierarchical' || (reportInfo?.isReport && detectedType === 'hierarchical')) {
     hierarchicalResult = parseHierarchical(cleanedRows);
     detectedAccounts = hierarchicalResult.accounts;
   }
 
-  const confidence = structureType === 'tabular'
+  const confidence = structureType === 'tabular' || structureType === 'report'
     ? computeConfidence(suggestedMapping, cleanedRows)
     : structConfidence;
 
@@ -703,6 +935,7 @@ export async function previewFile(file: File): Promise<PreviewData> {
     isHierarchical: structureType === 'hierarchical',
     structureType,
     hierarchicalResult,
+    reportInfo,
   };
 }
 
