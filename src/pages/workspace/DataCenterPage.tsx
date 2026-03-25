@@ -55,7 +55,13 @@ export default function DataCenterPage() {
   const [reviewFileName, setReviewFileName] = useState('');
   const [reviewFileId, setReviewFileId] = useState('');
 
-  // ─── Template import (direct path) ──────────────────────────────
+  // Template validation error state
+  const [templateErrors, setTemplateErrors] = useState<TemplateRowError[]>([]);
+  const [templateErrorDialogOpen, setTemplateErrorDialogOpen] = useState(false);
+  const [templateValidationResult, setTemplateValidationResult] = useState<TemplateValidationResult | null>(null);
+  const [templateErrorFileName, setTemplateErrorFileName] = useState('');
+
+  // ─── Template import (strict deterministic path) ───────────────
 
   const handleTemplateImport = useCallback(async (file: globalThis.File, fileId: string) => {
     if (!projectId) return;
@@ -72,26 +78,31 @@ export default function DataCenterPage() {
 
       const { isTemplate, mappedColumns } = detectTemplateMatch(headers);
       if (!isTemplate) {
-        // Shouldn't happen since we checked before, but fallback
         updateFileStatus(projectId, fileId, 'error');
-        toast.error('Template structure mismatch.');
+        toast.error('Template structure mismatch. Expected columns: Date, Account Number, Account Name, Description, Debit, Credit.');
         return;
       }
 
-      const { entries, errors } = parseTemplateFile(rows, mappedColumns);
+      const result = validateAndParseTemplate(rows, mappedColumns);
 
-      if (errors.length > 0) {
-        toast.warning(`${errors.length} row(s) skipped due to validation errors.`, { duration: 5000 });
+      // ── Block import if validation errors exist ──
+      if (!result.valid) {
+        updateFileStatus(projectId, fileId, 'error');
+        setTemplateErrors(result.errors);
+        setTemplateValidationResult(result);
+        setTemplateErrorFileName(file.name);
+        setTemplateErrorDialogOpen(true);
+        return;
       }
 
-      if (entries.length === 0) {
+      if (result.entries.length === 0) {
         updateFileStatus(projectId, fileId, 'error');
         toast.error('No valid entries found in template file.');
         return;
       }
 
-      // Direct import — skip confidence scoring for template files
-      const journalEntries = entries.map((e, idx) => ({
+      // Direct import — deterministic, no AI
+      const journalEntries = result.entries.map((e, idx) => ({
         id: `e-${Date.now()}-${idx}`,
         date: e.date,
         reference: `JE-${String(idx + 1).padStart(3, '0')}`,
@@ -105,7 +116,7 @@ export default function DataCenterPage() {
       }));
 
       const accountMap = new Map<string, string>();
-      for (const e of entries) {
+      for (const e of result.entries) {
         if (e.accountCode && e.accountCode !== '') {
           accountMap.set(e.accountCode, e.accountName);
         }
@@ -126,7 +137,7 @@ export default function DataCenterPage() {
       mergeProjectMappings(projectId, mappings);
       learnAccountPatterns(projectId, Array.from(accountMap.entries()).map(([code, name]) => ({ code, name })));
 
-      toast.success(`Imported ${journalEntries.length} entries from template.`);
+      toast.success(`✅ Data imported successfully — ${journalEntries.length} entries with 0 errors`, { duration: 5000 });
     } catch (err) {
       updateFileStatus(projectId, fileId, 'error');
       toast.error(`Template import failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
