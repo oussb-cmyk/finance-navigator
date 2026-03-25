@@ -8,7 +8,7 @@ import { useProjectFiles } from '@/hooks/useStableStoreSelectors';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { previewFile, parseFileWithMapping, hierarchicalToParseResult } from '@/lib/fileParser';
-import type { PreviewData, ColumnMapping, HierarchicalTransaction, DetectedAccount } from '@/lib/fileParser';
+import type { PreviewData, ColumnMapping, HierarchicalTransaction, DetectedAccount, ReportDetectionResult } from '@/lib/fileParser';
 import { computeRowConfidence } from '@/lib/confidenceScoring';
 import type { ScoredRow } from '@/lib/confidenceScoring';
 import { ColumnMappingDialog } from '@/components/workspace/ColumnMappingDialog';
