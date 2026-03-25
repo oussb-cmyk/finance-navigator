@@ -274,3 +274,21 @@ export function getRowIssueTypes(rowIndex: number, issues: RowIssue[]): Set<Issu
   }
   return types;
 }
+
+// ── Duplicate removal ─────────────────────────────────────────
+
+export function removeDuplicates(rows: ImportRow[]): { deduped: ImportRow[]; removedCount: number } {
+  const seen = new Set<string>();
+  const deduped: ImportRow[] = [];
+  let removedCount = 0;
+  for (const r of rows) {
+    const fp = rowFingerprint(r);
+    if (seen.has(fp)) {
+      removedCount++;
+    } else {
+      seen.add(fp);
+      deduped.push(r);
+    }
+  }
+  return { deduped, removedCount };
+}
