@@ -13,7 +13,8 @@ const CATEGORIES = [
 
 export default function MappingPage() {
   const { projectId } = useParams();
-  const mappings = useProjectStore((s) => s.getProjectMappings(projectId || ''));
+  const pid = projectId || '';
+  const mappings = useProjectStore((s) => s.mappings[pid] ?? []);
   const updateMapping = useProjectStore((s) => s.updateMapping);
 
   const mapped = mappings.filter(m => m.isMapped).length;

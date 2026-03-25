@@ -41,8 +41,8 @@ export function WorkspaceSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
   const navigate = useNavigate();
-  const project = useProjectStore((s) => s.getCurrentProject());
   const currentProjectId = useProjectStore((s) => s.currentProjectId);
+  const project = useProjectStore((s) => s.projects.find(p => p.id === s.currentProjectId));
 
   return (
     <Sidebar collapsible="icon">
