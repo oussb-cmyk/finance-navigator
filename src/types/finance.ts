@@ -32,7 +32,7 @@ export interface AccountMapping {
   isMapped: boolean;
 }
 
-export type JournalType = 'sales' | 'purchases' | 'bank' | 'cash' | 'payroll' | 'tax' | 'general';
+export type JournalType = 'sales' | 'purchases' | 'bank' | 'cash' | 'payroll' | 'tax' | 'financing' | 'general';
 
 export const JOURNAL_TYPES: { value: JournalType; label: string }[] = [
   { value: 'sales', label: 'Sales' },
@@ -41,6 +41,7 @@ export const JOURNAL_TYPES: { value: JournalType; label: string }[] = [
   { value: 'cash', label: 'Cash' },
   { value: 'payroll', label: 'Payroll' },
   { value: 'tax', label: 'Tax' },
+  { value: 'financing', label: 'Financing' },
   { value: 'general', label: 'General' },
 ];
 

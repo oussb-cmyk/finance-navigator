@@ -139,6 +139,10 @@ const KEYWORD_RULES: KeywordRule[] = [
     journal: 'tax',
     pattern: /\b(tva|vat|tax|taxe|impôt|contribution|cfe|cvae|is\b|ir\b)\b/i,
   },
+  {
+    journal: 'financing',
+    pattern: /\b(emprunt|loan|prêt|crédit-bail|leasing|obligation|borrowing|dette\s*financière|remboursement\s*emprunt)\b/i,
+  },
 ];
 
 // ── Public API ──────────────────────────────────────────────────────
