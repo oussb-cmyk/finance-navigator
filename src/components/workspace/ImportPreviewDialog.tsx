@@ -170,27 +170,27 @@ export function ImportPreviewDialog({
               </div>
             )}
 
-            {/* 3 Action Buttons */}
+            {/* Action Buttons — Review is primary */}
             <div className="flex flex-wrap gap-2">
+              <Button size="sm" onClick={() => onOpenChange(false)}>
+                <Eye className="h-3.5 w-3.5 mr-1.5" />
+                Review & Fix
+              </Button>
               {!autoFixApplied && (
                 <Button variant="outline" size="sm" onClick={handleAutoFix}>
                   <Wand2 className="h-3.5 w-3.5 mr-1.5" />
                   Fix Automatically
                 </Button>
               )}
-              <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
-                <Eye className="h-3.5 w-3.5 mr-1.5" />
-                Review & Fix Manually
-              </Button>
               {!strictMode && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="text-muted-foreground"
+                  className="text-muted-foreground text-xs"
                   onClick={() => onConfirm(rows)}
                   disabled={rows.length === 0}
                 >
-                  Import Anyway (Ignore Issues)
+                  Import Anyway
                 </Button>
               )}
             </div>
