@@ -23,6 +23,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import type { UploadedFile } from '@/types/finance';
+import { useImportMetaStore } from '@/store/useImportMetaStore';
 
 interface PendingFile {
   fileId: string;
@@ -44,6 +45,7 @@ export default function DataCenterPage() {
   const recordBatchCorrections = useLearningStore((s) => s.recordBatchCorrections);
   const saveFileFingerprint = useLearningStore((s) => s.saveFileFingerprint);
   const getAccountConfidenceBoost = useLearningStore((s) => s.getAccountConfidenceBoost);
+  const addImportMeta = useImportMetaStore((s) => s.addImport);
 
   const [dragOver, setDragOver] = useState(false);
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
@@ -323,9 +325,20 @@ export default function DataCenterPage() {
   };
 
   /** Handle confirmed import from ImportPreviewDialog */
-  const handlePreviewConfirm = (rows: ImportRow[]) => {
-    if (!previewData) return;
+  const handlePreviewConfirm = (rows: ImportRow[], meta: { qualityScore: number; issuesDetected: number; issuesFixed: number }) => {
+    if (!previewData || !projectId) return;
     commitImport(rows, previewData.fileId, previewData.fileName, previewData.mode);
+    addImportMeta({
+      id: `imp-${Date.now()}`,
+      projectId,
+      fileName: previewData.fileName,
+      importDate: new Date().toISOString().slice(0, 10),
+      importType: previewData.mode,
+      qualityScore: meta.qualityScore,
+      issuesDetected: meta.issuesDetected,
+      issuesFixed: meta.issuesFixed,
+      rowsImported: rows.length,
+    });
     setPreviewData(null);
   };
 

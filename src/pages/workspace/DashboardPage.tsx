@@ -1,14 +1,17 @@
 import { useParams } from 'react-router-dom';
 import { useProjectEntries } from '@/hooks/useStableStoreSelectors';
+import { useImportMetaStore } from '@/store/useImportMetaStore';
 import { KPICard } from '@/components/shared/KPICard';
-import { DollarSign, TrendingDown, TrendingUp, Percent } from 'lucide-react';
+import { DollarSign, TrendingDown, TrendingUp, Percent, ShieldCheck } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const COLORS = ['hsl(173,58%,39%)', 'hsl(210,92%,45%)', 'hsl(38,92%,50%)', 'hsl(152,69%,31%)', 'hsl(0,72%,51%)'];
 
 export default function DashboardPage() {
   const { projectId } = useParams();
-  const entries = useProjectEntries(projectId || '');
+  const pid = projectId || '';
+  const entries = useProjectEntries(pid);
+  const { score: reliabilityScore, lastImportDate } = useImportMetaStore((s) => s.getReliabilityScore(pid));
 
   const sumByPrefix = (prefixes: string[], field: 'debit' | 'credit') =>
     entries.filter(e => prefixes.some(p => e.accountCode.startsWith(p))).reduce((s, e) => s + e[field], 0);
@@ -53,11 +56,25 @@ export default function DashboardPage() {
         <p className="page-subtitle">Key financial metrics and charts</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         <KPICard label="Revenue" value={revenue} previousValue={revenue * 0.87} format="currency" icon={<DollarSign className="h-4 w-4" />} />
         <KPICard label="Total Expenses" value={totalExpenses} previousValue={totalExpenses * 0.93} format="currency" icon={<TrendingDown className="h-4 w-4" />} />
         <KPICard label="Net Income" value={netIncome} previousValue={netIncome * 0.82} format="currency" icon={<TrendingUp className="h-4 w-4" />} />
         <KPICard label="Gross Margin" value={grossMargin} previousValue={44.8} format="percentage" icon={<Percent className="h-4 w-4" />} />
+        {reliabilityScore > 0 && (
+          <div className="bg-card border border-border rounded-xl p-4 flex flex-col gap-1">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <ShieldCheck className="h-4 w-4" />
+              <span className="text-xs font-medium">Data Reliability</span>
+            </div>
+            <span className={`text-2xl font-bold ${reliabilityScore >= 90 ? 'text-success' : reliabilityScore >= 60 ? 'text-warning' : 'text-destructive'}`}>
+              {reliabilityScore}%
+            </span>
+            {lastImportDate && (
+              <span className="text-xs text-muted-foreground">Last import: {lastImportDate}</span>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
