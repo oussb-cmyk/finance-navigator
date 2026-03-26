@@ -31,22 +31,24 @@ import { AlertTriangle, Sparkles, CheckCircle, RotateCcw, ChevronDown, ChevronRi
 
 /* ── Journal colour tokens (semantic) ──────────────────────────────── */
 const JOURNAL_COLORS: Record<JournalType, string> = {
-  sales: 'bg-emerald-500/15 text-emerald-700 border-emerald-500/30',
-  purchases: 'bg-amber-500/15 text-amber-700 border-amber-500/30',
-  bank: 'bg-blue-500/15 text-blue-700 border-blue-500/30',
+  sales: 'bg-success/15 text-success border-success/30',
+  purchases: 'bg-destructive/15 text-destructive border-destructive/30',
+  bank: 'bg-info/15 text-info border-info/30',
   cash: 'bg-purple-500/15 text-purple-700 border-purple-500/30',
   payroll: 'bg-pink-500/15 text-pink-700 border-pink-500/30',
-  tax: 'bg-orange-500/15 text-orange-700 border-orange-500/30',
+  tax: 'bg-warning/15 text-warning border-warning/30',
+  financing: 'bg-cyan-500/15 text-cyan-700 border-cyan-500/30',
   general: 'bg-muted text-muted-foreground border-border',
 };
 
 const JOURNAL_DOT: Record<JournalType, string> = {
-  sales: 'bg-emerald-500',
-  purchases: 'bg-amber-500',
-  bank: 'bg-blue-500',
+  sales: 'bg-success',
+  purchases: 'bg-destructive',
+  bank: 'bg-info',
   cash: 'bg-purple-500',
   payroll: 'bg-pink-500',
-  tax: 'bg-orange-500',
+  tax: 'bg-warning',
+  financing: 'bg-cyan-500',
   general: 'bg-muted-foreground',
 };
 
