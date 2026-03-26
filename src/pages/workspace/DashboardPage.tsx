@@ -13,7 +13,7 @@ export default function DashboardPage() {
   const pid = projectId || '';
   const entries = useProjectEntries(pid);
   const importMetas = useImportMetaStore((s) => s.imports[pid]);
-  const reliabilityData = React.useMemo(() => {
+  const reliabilityData = useMemo(() => {
     const metas = importMetas || [];
     if (metas.length === 0) return { score: 0, lastImportDate: null };
     const totalWeight = metas.reduce((sum, _, i) => sum + (i + 1), 0);
