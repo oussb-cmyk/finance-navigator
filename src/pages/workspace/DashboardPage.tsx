@@ -1,7 +1,8 @@
 import { useParams } from 'react-router-dom';
 import { useProjectEntries } from '@/hooks/useStableStoreSelectors';
+import { useImportMetaStore } from '@/store/useImportMetaStore';
 import { KPICard } from '@/components/shared/KPICard';
-import { DollarSign, TrendingDown, TrendingUp, Percent } from 'lucide-react';
+import { DollarSign, TrendingDown, TrendingUp, Percent, ShieldCheck } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const COLORS = ['hsl(173,58%,39%)', 'hsl(210,92%,45%)', 'hsl(38,92%,50%)', 'hsl(152,69%,31%)', 'hsl(0,72%,51%)'];
