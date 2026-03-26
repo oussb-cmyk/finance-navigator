@@ -32,6 +32,16 @@ export interface AccountMapping {
   isMapped: boolean;
 }
 
+export type JournalType = 'sales' | 'purchases' | 'bank' | 'cash' | 'general';
+
+export const JOURNAL_TYPES: { value: JournalType; label: string }[] = [
+  { value: 'sales', label: 'Sales' },
+  { value: 'purchases', label: 'Purchases' },
+  { value: 'bank', label: 'Bank' },
+  { value: 'cash', label: 'Cash' },
+  { value: 'general', label: 'General' },
+];
+
 export interface JournalEntry {
   id: string;
   date: string;
@@ -43,6 +53,7 @@ export interface JournalEntry {
   credit: number;
   isValidated: boolean;
   source: string;
+  journalType?: JournalType;
 }
 
 export interface FinancialStatement {
