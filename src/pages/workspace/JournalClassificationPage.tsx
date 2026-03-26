@@ -1,14 +1,16 @@
-import { useState, useMemo, useCallback, useRef } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { useProjectStore } from '@/store/useProjectStore';
 import { useProjectEntries } from '@/hooks/useStableStoreSelectors';
-import { classifyEntries, reclassifyEntries } from '@/lib/journalClassification';
+import { classifyEntries, reclassifyEntries, classifyWithConfidence } from '@/lib/journalClassification';
+import type { ClassificationResult } from '@/lib/journalClassification';
 import { useLearningStore } from '@/store/useLearningStore';
 import { JOURNAL_TYPES } from '@/types/finance';
 import type { JournalType, JournalEntry } from '@/types/finance';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { JournalSearchFilters, applySearchFilters, highlightMatch, type SearchFilters } from '@/components/workspace/JournalSearchFilters';
 import {
   Select,
@@ -28,7 +30,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { AlertTriangle, Sparkles, CheckCircle, RotateCcw, ChevronDown, ChevronRight } from 'lucide-react';
+import { AlertTriangle, Sparkles, CheckCircle, RotateCcw, ChevronDown, ChevronRight, Eye, ShieldAlert, Lightbulb } from 'lucide-react';
 
 /* ── Journal colour tokens (semantic) ──────────────────────────────── */
 const JOURNAL_COLORS: Record<JournalType, string> = {
@@ -52,6 +54,23 @@ const JOURNAL_DOT: Record<JournalType, string> = {
   financing: 'bg-cyan-500',
   general: 'bg-muted-foreground',
 };
+
+/* ── Confidence helpers ────────────────────────────────────────────── */
+function confidenceBadgeClass(level: 'high' | 'medium' | 'low'): string {
+  switch (level) {
+    case 'high': return 'bg-success/15 text-success border-success/30';
+    case 'medium': return 'bg-warning/15 text-warning border-warning/30';
+    case 'low': return 'bg-destructive/15 text-destructive border-destructive/30';
+  }
+}
+
+function confidenceRowBg(level: 'high' | 'medium' | 'low'): string {
+  switch (level) {
+    case 'high': return '';
+    case 'medium': return 'bg-warning/5';
+    case 'low': return 'bg-destructive/5';
+  }
+}
 
 /* ── Grouped-by-account helper ─────────────────────────────────────── */
 interface AccountGroup {
@@ -93,15 +112,62 @@ export default function JournalClassificationPage() {
   const [bulkType, setBulkType] = useState<JournalType | ''>('');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [searchFilters, setSearchFilters] = useState<SearchFilters>({ query: '', amountMin: '', amountMax: '', dateFrom: '', dateTo: '' });
+  const [showOnlyIssues, setShowOnlyIssues] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
+
+  /* ── Confidence map (computed once per entries change) ──── */
+  const confidenceMap = useMemo(() => {
+    const map = new Map<string, ClassificationResult>();
+    entries.forEach((e) => {
+      map.set(e.id, classifyWithConfidence(e));
+    });
+    return map;
+  }, [entries]);
+
+  /* ── Confidence summary stats ─────────────────────────── */
+  const confidenceStats = useMemo(() => {
+    let high = 0, medium = 0, low = 0;
+    confidenceMap.forEach((c) => {
+      if (c.level === 'high') high++;
+      else if (c.level === 'medium') medium++;
+      else low++;
+    });
+    return { high, medium, low, needsReview: medium + low };
+  }, [confidenceMap]);
 
   /* ── Derived data ─────────────────────────────────────── */
   const unclassified = useMemo(() => entries.filter((e) => !e.journalType).length, [entries]);
 
+  const workingEntries = useMemo(() => {
+    let result = entries;
+    // Focus mode: only low/medium confidence
+    if (focusMode) {
+      result = result.filter((e) => {
+        const c = confidenceMap.get(e.id);
+        return c && c.level !== 'high';
+      });
+      // Sort by confidence ascending
+      result = [...result].sort((a, b) => {
+        const ca = confidenceMap.get(a.id)?.confidence ?? 0;
+        const cb = confidenceMap.get(b.id)?.confidence ?? 0;
+        return ca - cb;
+      });
+    }
+    // Show only issues toggle
+    if (showOnlyIssues && !focusMode) {
+      result = result.filter((e) => {
+        const c = confidenceMap.get(e.id);
+        return c && c.level === 'low';
+      });
+    }
+    return result;
+  }, [entries, focusMode, showOnlyIssues, confidenceMap]);
+
   const journalFiltered = useMemo(() => {
-    if (filterJournal === 'all') return entries;
-    if (filterJournal === 'unclassified') return entries.filter((e) => !e.journalType);
-    return entries.filter((e) => e.journalType === filterJournal);
-  }, [entries, filterJournal]);
+    if (filterJournal === 'all') return workingEntries;
+    if (filterJournal === 'unclassified') return workingEntries.filter((e) => !e.journalType);
+    return workingEntries.filter((e) => e.journalType === filterJournal);
+  }, [workingEntries, filterJournal]);
 
   const filteredEntries = useMemo(
     () => applySearchFilters(journalFiltered, searchFilters) as JournalEntry[],
@@ -138,17 +204,17 @@ export default function JournalClassificationPage() {
       if (!projectId) return;
       const entry = entries.find((e) => e.id === entryId);
       if (entry) {
-        // Record correction for learning
         recordCorrection(projectId, {
           original: { accountCode: entry.accountCode, description: entry.description },
           corrected: { accountCode: entry.accountCode, description: entry.description },
           timestamp: Date.now(),
         });
+        learnAccountPatterns(projectId, [{ code: entry.accountCode, name: entry.accountName }]);
       }
       const updated = entries.map((e) => (e.id === entryId ? { ...e, journalType: type } : e));
       setProjectEntries(projectId, updated);
     },
-    [projectId, entries, setProjectEntries, recordCorrection],
+    [projectId, entries, setProjectEntries, recordCorrection, learnAccountPatterns],
   );
 
   const handleBulkApply = useCallback(() => {
@@ -168,12 +234,6 @@ export default function JournalClassificationPage() {
       else next.add(id);
       return next;
     });
-  };
-
-  const toggleSelectAll = () => {
-    const allIds = filteredEntries.map((e) => e.id);
-    if (selected.size === allIds.length) setSelected(new Set());
-    else setSelected(new Set(allIds));
   };
 
   const toggleGroup = (code: string) => {
@@ -224,82 +284,153 @@ export default function JournalClassificationPage() {
           </div>
         </div>
 
-        {/* Validation banner */}
-        {unclassified > 0 ? (
-          <div className="bg-warning/10 border border-warning/30 rounded-xl p-4 mb-6 flex items-center gap-3">
-            <AlertTriangle className="h-5 w-5 text-warning shrink-0" />
-            <div>
-              <p className="text-sm font-semibold text-foreground">{unclassified} unclassified entries</p>
-              <p className="text-xs text-muted-foreground">All entries should be classified before proceeding to Mapping</p>
+        {/* ── Confidence summary panel ──────────────────────── */}
+        <div className="grid grid-cols-4 gap-3 mb-6">
+          <div className="bg-card border border-border rounded-xl p-4">
+            <p className="text-xs text-muted-foreground font-medium">Total Entries</p>
+            <p className="text-2xl font-bold text-foreground mt-1">{entries.length}</p>
+          </div>
+          <div className="bg-success/10 border border-success/30 rounded-xl p-4">
+            <p className="text-xs text-success font-medium">High Confidence</p>
+            <p className="text-2xl font-bold text-success mt-1">{confidenceStats.high}</p>
+          </div>
+          <div className="bg-warning/10 border border-warning/30 rounded-xl p-4">
+            <p className="text-xs text-warning font-medium">Medium Confidence</p>
+            <p className="text-2xl font-bold text-warning mt-1">{confidenceStats.medium}</p>
+          </div>
+          <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-4">
+            <p className="text-xs text-destructive font-medium">Needs Review</p>
+            <p className="text-2xl font-bold text-destructive mt-1">{confidenceStats.low}</p>
+          </div>
+        </div>
+
+        {/* ── Priority review banner ───────────────────────── */}
+        {confidenceStats.needsReview > 0 ? (
+          <div className={`border rounded-xl p-4 mb-6 flex items-center justify-between ${
+            confidenceStats.low > 0 
+              ? 'bg-destructive/10 border-destructive/30' 
+              : 'bg-warning/10 border-warning/30'
+          }`}>
+            <div className="flex items-center gap-3">
+              <ShieldAlert className={`h-5 w-5 shrink-0 ${confidenceStats.low > 0 ? 'text-destructive' : 'text-warning'}`} />
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  {confidenceStats.needsReview} entries need review
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {confidenceStats.low > 0 && `${confidenceStats.low} low confidence · `}
+                  {confidenceStats.medium > 0 && `${confidenceStats.medium} medium confidence`}
+                </p>
+              </div>
             </div>
+            <Button
+              size="sm"
+              variant={focusMode ? 'secondary' : 'default'}
+              onClick={() => setFocusMode(!focusMode)}
+              className="gap-1.5"
+            >
+              <Eye className="h-3.5 w-3.5" />
+              {focusMode ? 'Exit Focus Mode' : 'Review Issues'}
+            </Button>
           </div>
         ) : (
           <div className="bg-success/10 border border-success/30 rounded-xl p-4 mb-6 flex items-center gap-3">
             <CheckCircle className="h-5 w-5 text-success shrink-0" />
-            <p className="text-sm font-semibold text-foreground">All entries classified — ready for Mapping</p>
+            <p className="text-sm font-semibold text-foreground">All entries classified with high confidence — ready for Mapping</p>
+          </div>
+        )}
+
+        {/* Focus mode indicator */}
+        {focusMode && (
+          <div className="bg-info/10 border border-info/30 rounded-xl p-3 mb-4 flex items-center gap-3">
+            <Eye className="h-4 w-4 text-info" />
+            <p className="text-sm text-foreground">
+              <span className="font-semibold">Focus Mode:</span> Showing {workingEntries.length} entries sorted by lowest confidence first
+            </p>
+            <Button size="sm" variant="ghost" className="ml-auto text-xs" onClick={() => setFocusMode(false)}>
+              Exit
+            </Button>
           </div>
         )}
 
         {/* ── Filter chips + hover summary ─────────────────── */}
-        <div className="flex flex-wrap gap-2 mb-6">
-          <button
-            onClick={() => setFilterJournal('all')}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-              filterJournal === 'all'
-                ? 'bg-primary text-primary-foreground border-primary'
-                : 'bg-card border-border text-foreground hover:bg-muted'
-            }`}
-          >
-            All ({entries.length})
-          </button>
-
-          {unclassified > 0 && (
+        {!focusMode && (
+          <div className="flex flex-wrap gap-2 mb-6">
             <button
-              onClick={() => setFilterJournal('unclassified')}
+              onClick={() => setFilterJournal('all')}
               className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                filterJournal === 'unclassified'
-                  ? 'bg-warning text-warning-foreground border-warning'
-                  : 'bg-warning/10 border-warning/30 text-foreground hover:bg-warning/20'
+                filterJournal === 'all'
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'bg-card border-border text-foreground hover:bg-muted'
               }`}
             >
-              Unclassified ({unclassified})
+              All ({entries.length})
             </button>
-          )}
 
-          {JOURNAL_TYPES.map(
-            (j) =>
-              journalCounts[j.value] > 0 && (
-                <HoverCard key={j.value} openDelay={200} closeDelay={100}>
-                  <HoverCardTrigger asChild>
-                    <button
-                      onClick={() => setFilterJournal(j.value)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
-                        filterJournal === j.value
-                          ? 'bg-primary text-primary-foreground border-primary'
-                          : `${JOURNAL_COLORS[j.value]} hover:opacity-80`
-                      }`}
-                    >
-                      {j.label} ({journalCounts[j.value]})
-                    </button>
-                  </HoverCardTrigger>
-                  <HoverCardContent className="w-56 p-3" side="bottom">
-                    <p className="text-xs font-semibold mb-2">{j.label} Journal</p>
-                    <p className="text-xs text-muted-foreground">
-                      {journalCounts[j.value]} entries classified as {j.label}
-                    </p>
-                  </HoverCardContent>
-                </HoverCard>
-              ),
+            {unclassified > 0 && (
+              <button
+                onClick={() => setFilterJournal('unclassified')}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                  filterJournal === 'unclassified'
+                    ? 'bg-warning text-warning-foreground border-warning'
+                    : 'bg-warning/10 border-warning/30 text-foreground hover:bg-warning/20'
+                }`}
+              >
+                Unclassified ({unclassified})
+              </button>
+            )}
+
+            {JOURNAL_TYPES.map(
+              (j) =>
+                journalCounts[j.value] > 0 && (
+                  <HoverCard key={j.value} openDelay={200} closeDelay={100}>
+                    <HoverCardTrigger asChild>
+                      <button
+                        onClick={() => setFilterJournal(j.value)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                          filterJournal === j.value
+                            ? 'bg-primary text-primary-foreground border-primary'
+                            : `${JOURNAL_COLORS[j.value]} hover:opacity-80`
+                        }`}
+                      >
+                        {j.label} ({journalCounts[j.value]})
+                      </button>
+                    </HoverCardTrigger>
+                    <HoverCardContent className="w-56 p-3" side="bottom">
+                      <p className="text-xs font-semibold mb-2">{j.label} Journal</p>
+                      <p className="text-xs text-muted-foreground">
+                        {journalCounts[j.value]} entries classified as {j.label}
+                      </p>
+                    </HoverCardContent>
+                  </HoverCard>
+                ),
+            )}
+          </div>
+        )}
+
+        {/* ── Search bar + show-only-issues toggle ─────────── */}
+        <div className="flex items-center gap-4 mb-4">
+          <div className="flex-1">
+            <JournalSearchFilters
+              filters={searchFilters}
+              onChange={setSearchFilters}
+              resultCount={filteredEntries.length}
+              totalCount={entries.length}
+            />
+          </div>
+          {!focusMode && (
+            <div className="flex items-center gap-2 shrink-0">
+              <Switch
+                checked={showOnlyIssues}
+                onCheckedChange={setShowOnlyIssues}
+                id="show-issues"
+              />
+              <label htmlFor="show-issues" className="text-xs font-medium text-muted-foreground cursor-pointer">
+                Only issues
+              </label>
+            </div>
           )}
         </div>
-
-        {/* ── Search bar ─────────────────────────────────── */}
-        <JournalSearchFilters
-          filters={searchFilters}
-          onChange={setSearchFilters}
-          resultCount={filteredEntries.length}
-          totalCount={entries.length}
-        />
 
         {/* ── Bulk edit bar ────────────────────────────────── */}
         {selected.size > 0 && (
@@ -384,48 +515,83 @@ export default function JournalClassificationPage() {
                         <th className="text-right">Debit</th>
                         <th className="text-right">Credit</th>
                         <th>Journal</th>
+                        <th className="w-24 text-center">Confidence</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {group.entries.map((e) => (
-                        <tr key={e.id} className={!e.journalType ? 'bg-warning/5' : ''}>
-                          <td>
-                            <Checkbox
-                              checked={selected.has(e.id)}
-                              onCheckedChange={() => toggleSelect(e.id)}
-                            />
-                          </td>
-                          <td className="text-xs mono">{highlightMatch(e.date, searchFilters.query)}</td>
-                          <td className="text-xs mono text-muted-foreground">{highlightMatch(e.reference, searchFilters.query)}</td>
-                          <td className="text-sm max-w-[250px] truncate">{highlightMatch(e.description, searchFilters.query)}</td>
-                          <td className="text-right mono text-sm">
-                            {e.debit > 0 ? `${e.debit.toLocaleString()}` : ''}
-                          </td>
-                          <td className="text-right mono text-sm">
-                            {e.credit > 0 ? `${e.credit.toLocaleString()}` : ''}
-                          </td>
-                          <td>
-                            <Select
-                              value={e.journalType || ''}
-                              onValueChange={(v) => handleChangeJournal(e.id, v as JournalType)}
-                            >
-                              <SelectTrigger className="w-[130px] h-7 text-xs">
-                                <SelectValue placeholder="Unclassified" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {JOURNAL_TYPES.map((j) => (
-                                  <SelectItem key={j.value} value={j.value}>
-                                    <span className="flex items-center gap-2">
-                                      <span className={`h-2 w-2 rounded-full ${JOURNAL_DOT[j.value]}`} />
-                                      {j.label}
-                                    </span>
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </td>
-                        </tr>
-                      ))}
+                      {group.entries.map((e) => {
+                        const conf = confidenceMap.get(e.id);
+                        const rowBg = conf ? confidenceRowBg(conf.level) : '';
+
+                        return (
+                          <tr key={e.id} className={rowBg}>
+                            <td>
+                              <Checkbox
+                                checked={selected.has(e.id)}
+                                onCheckedChange={() => toggleSelect(e.id)}
+                              />
+                            </td>
+                            <td className="text-xs mono">{highlightMatch(e.date, searchFilters.query)}</td>
+                            <td className="text-xs mono text-muted-foreground">{highlightMatch(e.reference, searchFilters.query)}</td>
+                            <td className="text-sm max-w-[200px]">
+                              <div className="truncate">{highlightMatch(e.description, searchFilters.query)}</div>
+                              {/* Smart suggestion for low confidence */}
+                              {conf && conf.suggestion && conf.level === 'low' && (
+                                <div className="flex items-center gap-1 mt-1">
+                                  <Lightbulb className="h-3 w-3 text-warning shrink-0" />
+                                  <span className="text-[10px] text-warning truncate">{conf.suggestion}</span>
+                                </div>
+                              )}
+                            </td>
+                            <td className="text-right mono text-sm">
+                              {e.debit > 0 ? `${e.debit.toLocaleString()}` : ''}
+                            </td>
+                            <td className="text-right mono text-sm">
+                              {e.credit > 0 ? `${e.credit.toLocaleString()}` : ''}
+                            </td>
+                            <td>
+                              <Select
+                                value={e.journalType || ''}
+                                onValueChange={(v) => handleChangeJournal(e.id, v as JournalType)}
+                              >
+                                <SelectTrigger className="w-[130px] h-7 text-xs">
+                                  <SelectValue placeholder="Unclassified" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {JOURNAL_TYPES.map((j) => (
+                                    <SelectItem key={j.value} value={j.value}>
+                                      <span className="flex items-center gap-2">
+                                        <span className={`h-2 w-2 rounded-full ${JOURNAL_DOT[j.value]}`} />
+                                        {j.label}
+                                      </span>
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </td>
+                            <td className="text-center">
+                              {conf && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Badge className={`text-[10px] px-2 py-0.5 cursor-help ${confidenceBadgeClass(conf.level)}`}>
+                                      {conf.confidence}%
+                                    </Badge>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="left" className="max-w-[220px]">
+                                    <p className="text-xs font-semibold mb-1">
+                                      {conf.level === 'high' ? 'High' : conf.level === 'medium' ? 'Medium' : 'Low'} Confidence
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">{conf.reason}</p>
+                                    {conf.suggestion && (
+                                      <p className="text-xs text-warning mt-1">{conf.suggestion}</p>
+                                    )}
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}
@@ -436,7 +602,7 @@ export default function JournalClassificationPage() {
 
         {filteredEntries.length === 0 && (
           <div className="bg-card border border-border rounded-xl p-12 text-center text-muted-foreground">
-            No entries match this filter.
+            {focusMode ? 'No entries need review — all entries have high confidence.' : 'No entries match this filter.'}
           </div>
         )}
       </div>
