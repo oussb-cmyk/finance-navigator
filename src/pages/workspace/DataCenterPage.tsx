@@ -325,9 +325,20 @@ export default function DataCenterPage() {
   };
 
   /** Handle confirmed import from ImportPreviewDialog */
-  const handlePreviewConfirm = (rows: ImportRow[]) => {
-    if (!previewData) return;
+  const handlePreviewConfirm = (rows: ImportRow[], meta: { qualityScore: number; issuesDetected: number; issuesFixed: number }) => {
+    if (!previewData || !projectId) return;
     commitImport(rows, previewData.fileId, previewData.fileName, previewData.mode);
+    addImportMeta({
+      id: `imp-${Date.now()}`,
+      projectId,
+      fileName: previewData.fileName,
+      importDate: new Date().toISOString().slice(0, 10),
+      importType: previewData.mode,
+      qualityScore: meta.qualityScore,
+      issuesDetected: meta.issuesDetected,
+      issuesFixed: meta.issuesFixed,
+      rowsImported: rows.length,
+    });
     setPreviewData(null);
   };
 
