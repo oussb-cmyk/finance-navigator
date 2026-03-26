@@ -346,8 +346,8 @@ export default function JournalClassificationPage() {
                     <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
                   )}
                   <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${dotColor}`} />
-                  <span className="mono text-sm font-bold text-foreground">{group.accountCode || '—'}</span>
-                  <span className="text-sm text-muted-foreground truncate">{group.accountName}</span>
+                  <span className="mono text-sm font-bold text-foreground">{highlightMatch(group.accountCode || '—', searchFilters.query)}</span>
+                  <span className="text-sm text-muted-foreground truncate">{highlightMatch(group.accountName, searchFilters.query)}</span>
                   <Badge variant="secondary" className="ml-auto text-xs">
                     {group.entries.length}
                   </Badge>
