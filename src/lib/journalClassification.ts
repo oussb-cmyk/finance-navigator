@@ -146,38 +146,125 @@ const KEYWORD_RULES: KeywordRule[] = [
   },
 ];
 
+// ── Confidence scoring ──────────────────────────────────────────────
+
+export type ClassificationConfidence = 'high' | 'medium' | 'low';
+
+export interface ClassificationResult {
+  journal: JournalType;
+  confidence: number;          // 0–100
+  level: ClassificationConfidence;
+  reason: string;
+  suggestion?: string;         // hint for the user when confidence is low
+}
+
+function levelFromScore(score: number): ClassificationConfidence {
+  if (score >= 85) return 'high';
+  if (score >= 60) return 'medium';
+  return 'low';
+}
+
+/**
+ * Classify a single entry and compute a confidence score.
+ */
+export function classifyWithConfidence(entry: JournalEntry): ClassificationResult {
+  const code = (entry.accountCode || '').replace(/\D/g, '');
+  const text = `${entry.description} ${entry.reference}`;
+
+  // Safety checks → force low confidence
+  const hasAccount = !!code;
+  const hasAmount = entry.debit > 0 || entry.credit > 0;
+  const hasDate = !!entry.date;
+
+  if (!hasAmount || !hasDate) {
+    const journal = hasAccount ? classifyByAccount(code) ?? classifyByKeyword(text) ?? 'general' : 'general';
+    const missing: string[] = [];
+    if (!hasAmount) missing.push('zero amounts');
+    if (!hasDate) missing.push('missing date');
+    return {
+      journal,
+      confidence: Math.min(30, hasAccount ? 30 : 10),
+      level: 'low',
+      reason: `Needs review: ${missing.join(', ')}`,
+      suggestion: 'Verify this entry has valid amounts and date before proceeding.',
+    };
+  }
+
+  // 1) Account-prefix match (highest priority, strongest signal)
+  if (hasAccount) {
+    const accountJournal = classifyByAccount(code);
+    if (accountJournal) {
+      // Check prefix specificity: longer prefix → higher confidence
+      const matchedRule = ACCOUNT_RULES.find(r => code.startsWith(r.prefix));
+      const prefixLen = matchedRule?.prefix.length ?? 1;
+      const score = Math.min(95, 80 + prefixLen * 5);
+      return {
+        journal: accountJournal,
+        confidence: score,
+        level: levelFromScore(score),
+        reason: `Account prefix ${matchedRule?.prefix} → ${accountJournal}`,
+      };
+    }
+  }
+
+  // 2) Keyword match (medium signal)
+  const keywordJournal = classifyByKeyword(text);
+  if (keywordJournal) {
+    return {
+      journal: keywordJournal,
+      confidence: 65,
+      level: 'medium',
+      reason: `Keyword match in description → ${keywordJournal}`,
+      suggestion: `Suggested: ${capitalize(keywordJournal)} (based on description keywords)`,
+    };
+  }
+
+  // 3) Account exists but no specific rule matched
+  if (hasAccount) {
+    return {
+      journal: 'general',
+      confidence: 45,
+      level: 'low',
+      reason: 'Account exists but no specific classification rule matched',
+      suggestion: 'Review and assign the correct journal type manually.',
+    };
+  }
+
+  // 4) No match at all
+  return {
+    journal: 'general',
+    confidence: 20,
+    level: 'low',
+    reason: 'No account number or keyword match',
+    suggestion: 'Missing account code — assign journal manually.',
+  };
+}
+
+function classifyByAccount(code: string): JournalType | null {
+  for (const rule of ACCOUNT_RULES) {
+    if (code.startsWith(rule.prefix)) return rule.journal;
+  }
+  return null;
+}
+
+function classifyByKeyword(text: string): JournalType | null {
+  for (const rule of KEYWORD_RULES) {
+    if (rule.pattern.test(text)) return rule.journal;
+  }
+  return null;
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 // ── Public API ──────────────────────────────────────────────────────
 
 /**
- * Classify a single entry.
- * Returns the detected JournalType using PCG account-prefix first,
- * then keyword matching, then defaults to 'general'.
+ * Classify a single entry (simple — backward compatible).
  */
 export function detectJournalType(entry: JournalEntry): JournalType {
-  const code = (entry.accountCode || '').replace(/\D/g, '');
-
-  // 1) Account-prefix match (highest priority)
-  if (code.length > 0) {
-    for (const rule of ACCOUNT_RULES) {
-      if (code.startsWith(rule.prefix)) {
-        return rule.journal;
-      }
-    }
-  }
-
-  // 2) Keyword match on description + reference
-  const text = `${entry.description} ${entry.reference}`;
-  let bestKeyword: JournalType | null = null;
-  for (const rule of KEYWORD_RULES) {
-    if (rule.pattern.test(text)) {
-      bestKeyword = rule.journal;
-      break;
-    }
-  }
-  if (bestKeyword) return bestKeyword;
-
-  // 3) Fallback
-  return 'general';
+  return classifyWithConfidence(entry).journal;
 }
 
 /** Classify all entries that don't already have a journalType. */
