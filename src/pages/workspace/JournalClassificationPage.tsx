@@ -116,6 +116,7 @@ export default function JournalClassificationPage() {
   const deleteEntry = useProjectStore((s) => s.deleteEntry);
   const learnAccountPatterns = useLearningStore((s) => s.learnAccountPatterns);
   const recordCorrection = useLearningStore((s) => s.recordCorrection);
+  const getAccountConfidenceBoost = useLearningStore((s) => s.getAccountConfidenceBoost);
 
   const [filterJournal, setFilterJournal] = useState<string>('all');
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -126,12 +127,15 @@ export default function JournalClassificationPage() {
   const [focusMode, setFocusMode] = useState(false);
   const [showMappingWarning, setShowMappingWarning] = useState(false);
 
-  /* ── Confidence map ──────────────────────────────────── */
+  /* ── Confidence map (recomputed fresh every render) ── */
   const confidenceMap = useMemo(() => {
     const map = new Map<string, ClassificationResult>();
-    entries.forEach((e) => map.set(e.id, classifyWithConfidence(e)));
+    entries.forEach((e) => {
+      const bonus = projectId ? getAccountConfidenceBoost(projectId, e.accountCode || '') : 0;
+      map.set(e.id, classifyWithConfidence(e, bonus));
+    });
     return map;
-  }, [entries]);
+  }, [entries, projectId, getAccountConfidenceBoost]);
 
   const confidenceStats = useMemo(() => {
     let high = 0, medium = 0, low = 0;
