@@ -1,7 +1,8 @@
 import { useParams } from 'react-router-dom';
 import { useProjectStore } from '@/store/useProjectStore';
+import { useImportMetaStore } from '@/store/useImportMetaStore';
 import { useProjectFiles, useProjectEntries, useProjectMappings } from '@/hooks/useStableStoreSelectors';
-import { FileText, CheckCircle, AlertTriangle, Clock } from 'lucide-react';
+import { FileText, CheckCircle, AlertTriangle, Clock, ShieldCheck } from 'lucide-react';
 
 export default function ReportsPage() {
   const { projectId } = useParams();
