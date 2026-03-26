@@ -67,8 +67,13 @@ export function ImportPreviewDialog({
     setRows(deduped);
   }, [rows]);
 
-  const hasIssues = quality.issues.length > 0;
+  const issueCount = quality.issues.length;
+  const hasIssues = issueCount > 0;
   const isBlocked = strictMode && hasIssues;
+  const issueLevel: 'none' | 'warn' | 'critical' = issueCount === 0 ? 'none' : issueCount <= 10 ? 'warn' : 'critical';
+  const issueBorderColor = issueLevel === 'critical' ? 'border-destructive/40' : 'border-warning/40';
+  const issueBgColor = issueLevel === 'critical' ? 'bg-destructive/10' : 'bg-warning/10';
+  const issueTextColor = issueLevel === 'critical' ? 'text-destructive' : 'text-warning';
 
   const getRowTooltip = (rowIdx: number): string | null => {
     const types = getRowIssueTypes(rowIdx, quality.issues);
