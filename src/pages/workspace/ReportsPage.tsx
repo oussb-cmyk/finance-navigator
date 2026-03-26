@@ -46,9 +46,19 @@ export default function ReportsPage() {
         { label: 'Mapping completion', value: `${mappings.length > 0 ? Math.round(((mappings.length - unmapped) / mappings.length) * 100) : 0}%`, icon: <CheckCircle className="h-4 w-4 text-success" /> },
         { label: 'Validation completion', value: `${entries.length > 0 ? Math.round((validated / entries.length) * 100) : 0}%`, icon: <CheckCircle className="h-4 w-4 text-success" /> },
         { label: 'Unique accounts', value: new Set(entries.map(e => e.accountCode)).size, icon: <FileText className="h-4 w-4 text-info" /> },
-        { label: 'Date range', value: entries.length > 0 ? `${entries[0].date} – ${entries[entries.length - 1].date}` : 'N/A', icon: <Clock className="h-4 w-4 text-muted-foreground" /> },
-      ],
+      { label: 'Date range', value: entries.length > 0 ? `${entries[0].date} – ${entries[entries.length - 1].date}` : 'N/A', icon: <Clock className="h-4 w-4 text-muted-foreground" /> },
+    ],
     },
+    ...(reliabilityScore > 0 ? [{
+      title: 'Data Reliability',
+      items: [
+        { label: 'Reliability score', value: `${reliabilityScore}%`, icon: <ShieldCheck className={`h-4 w-4 ${reliabilityScore >= 90 ? 'text-success' : reliabilityScore >= 60 ? 'text-warning' : 'text-destructive'}`} /> },
+        { label: 'Last import', value: lastImportDate || 'N/A', icon: <Clock className="h-4 w-4 text-muted-foreground" /> },
+        { label: 'Total imports', value: importHistory.length, icon: <FileText className="h-4 w-4 text-info" /> },
+        { label: 'Total rows imported', value: importHistory.reduce((s, m) => s + m.rowsImported, 0), icon: <FileText className="h-4 w-4 text-info" /> },
+        { label: 'Total issues fixed', value: importHistory.reduce((s, m) => s + m.issuesFixed, 0), icon: <CheckCircle className="h-4 w-4 text-success" /> },
+      ],
+    }] : []),
   ];
 
   return (

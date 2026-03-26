@@ -56,11 +56,25 @@ export default function DashboardPage() {
         <p className="page-subtitle">Key financial metrics and charts</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         <KPICard label="Revenue" value={revenue} previousValue={revenue * 0.87} format="currency" icon={<DollarSign className="h-4 w-4" />} />
         <KPICard label="Total Expenses" value={totalExpenses} previousValue={totalExpenses * 0.93} format="currency" icon={<TrendingDown className="h-4 w-4" />} />
         <KPICard label="Net Income" value={netIncome} previousValue={netIncome * 0.82} format="currency" icon={<TrendingUp className="h-4 w-4" />} />
         <KPICard label="Gross Margin" value={grossMargin} previousValue={44.8} format="percentage" icon={<Percent className="h-4 w-4" />} />
+        {reliabilityScore > 0 && (
+          <div className="bg-card border border-border rounded-xl p-4 flex flex-col gap-1">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <ShieldCheck className="h-4 w-4" />
+              <span className="text-xs font-medium">Data Reliability</span>
+            </div>
+            <span className={`text-2xl font-bold ${reliabilityScore >= 90 ? 'text-success' : reliabilityScore >= 60 ? 'text-warning' : 'text-destructive'}`}>
+              {reliabilityScore}%
+            </span>
+            {lastImportDate && (
+              <span className="text-xs text-muted-foreground">Last import: {lastImportDate}</span>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
