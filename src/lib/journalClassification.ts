@@ -77,6 +77,7 @@ const ACCOUNT_RULES: AccountRule[] = ([
   { prefix: '631', journal: 'tax' },
   { prefix: '635', journal: 'tax' },
   { prefix: '637', journal: 'tax' },
+  { prefix: '66', journal: 'financing' },
   { prefix: '64', journal: 'payroll' },
   { prefix: '63', journal: 'tax' },
   { prefix: '6', journal: 'purchases' },
