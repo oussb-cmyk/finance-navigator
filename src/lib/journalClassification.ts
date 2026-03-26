@@ -17,7 +17,7 @@ interface AccountRule {
  * Order matters: longer prefixes are checked first so that e.g. "401" beats "4".
  * The list is sorted by prefix length desc at module load.
  */
-const ACCOUNT_RULES: AccountRule[] = [
+const ACCOUNT_RULES: AccountRule[] = ([
   // Class 4 — detailed sub-ranges
   { prefix: '401', journal: 'purchases' },
   { prefix: '402', journal: 'purchases' },
