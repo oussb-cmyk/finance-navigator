@@ -146,6 +146,57 @@ const KEYWORD_RULES: KeywordRule[] = [
   },
 ];
 
+// ── Account vs Description consistency rules ────────────────────────
+
+interface ConsistencyRule {
+  accountPrefix: string;
+  forbiddenPattern: RegExp;
+  expectedJournal: JournalType;
+  suggestedAccount: string;
+  suggestedLabel: string;
+  message: string;
+}
+
+const CONSISTENCY_RULES: ConsistencyRule[] = [
+  { accountPrefix: '6', forbiddenPattern: /\b(emprunt|loan|prêt|crédit-bail|leasing|borrowing|remboursement\s*emprunt|dette\s*financière)\b/i,
+    expectedJournal: 'financing', suggestedAccount: '164', suggestedLabel: 'Emprunts auprès des établissements de crédit',
+    message: 'Financing keywords detected in an expense account' },
+  { accountPrefix: '6', forbiddenPattern: /\b(facture\s*client|vente|sale|revenue|chiffre\s*d'affaires)\b/i,
+    expectedJournal: 'sales', suggestedAccount: '701', suggestedLabel: 'Ventes de produits finis',
+    message: 'Sales keywords detected in an expense account' },
+  { accountPrefix: '7', forbiddenPattern: /\b(achat|fournisseur|purchase|supplier|vendor|facture\s*fourn|procurement)\b/i,
+    expectedJournal: 'purchases', suggestedAccount: '601', suggestedLabel: 'Achats stockés - Matières premières',
+    message: 'Purchase keywords detected in a revenue account' },
+  { accountPrefix: '7', forbiddenPattern: /\b(salaire|salary|paie|payroll|cotisation|urssaf)\b/i,
+    expectedJournal: 'payroll', suggestedAccount: '641', suggestedLabel: 'Rémunérations du personnel',
+    message: 'Payroll keywords detected in a revenue account' },
+  { accountPrefix: '5', forbiddenPattern: /\b(tva|vat|tax|taxe|impôt|contribution|cfe|cvae)\b/i,
+    expectedJournal: 'tax', suggestedAccount: '445', suggestedLabel: 'État - Taxes sur le chiffre d\'affaires',
+    message: 'Tax keywords detected in a bank/cash account' },
+  { accountPrefix: '10', forbiddenPattern: /\b(achat|purchase|fournisseur|supplier|facture\s*fourn)\b/i,
+    expectedJournal: 'purchases', suggestedAccount: '401', suggestedLabel: 'Fournisseurs',
+    message: 'Purchase keywords detected in an equity account' },
+  { accountPrefix: '401', forbiddenPattern: /\b(facture\s*client|vente|sale|revenue|client)\b/i,
+    expectedJournal: 'sales', suggestedAccount: '411', suggestedLabel: 'Clients',
+    message: 'Sales keywords detected in a supplier account' },
+  { accountPrefix: '411', forbiddenPattern: /\b(achat|fournisseur|purchase|supplier|vendor)\b/i,
+    expectedJournal: 'purchases', suggestedAccount: '401', suggestedLabel: 'Fournisseurs',
+    message: 'Purchase keywords detected in a client account' },
+];
+
+function checkConsistency(code: string, text: string): {
+  inconsistent: boolean; penalty: number; message: string;
+  suggestedAccount?: string; suggestedLabel?: string; expectedJournal?: JournalType;
+} {
+  for (const rule of CONSISTENCY_RULES) {
+    if (code.startsWith(rule.accountPrefix) && rule.forbiddenPattern.test(text)) {
+      return { inconsistent: true, penalty: 50, message: rule.message,
+        suggestedAccount: rule.suggestedAccount, suggestedLabel: rule.suggestedLabel, expectedJournal: rule.expectedJournal };
+    }
+  }
+  return { inconsistent: false, penalty: 0, message: '' };
+}
+
 // ── Confidence scoring ──────────────────────────────────────────────
 
 export type ClassificationConfidence = 'high' | 'medium' | 'low';
@@ -156,6 +207,9 @@ export interface ClassificationResult {
   level: ClassificationConfidence;
   reason: string;
   suggestion?: string;         // hint for the user when confidence is low
+  inconsistency?: string;      // mismatch warning message
+  suggestedAccount?: string;   // suggested account code on mismatch
+  suggestedAccountLabel?: string;
 }
 
 function levelFromScore(score: number): ClassificationConfidence {
@@ -171,7 +225,6 @@ export function classifyWithConfidence(entry: JournalEntry): ClassificationResul
   const code = (entry.accountCode || '').replace(/\D/g, '');
   const text = `${entry.description} ${entry.reference}`;
 
-  // Safety checks → force low confidence
   const hasAccount = !!code;
   const hasAmount = entry.debit > 0 || entry.credit > 0;
   const hasDate = !!entry.date;
@@ -190,14 +243,30 @@ export function classifyWithConfidence(entry: JournalEntry): ClassificationResul
     };
   }
 
-  // 1) Account-prefix match (highest priority, strongest signal)
+  // 1) Account-prefix match
   if (hasAccount) {
     const accountJournal = classifyByAccount(code);
     if (accountJournal) {
-      // Check prefix specificity: longer prefix → higher confidence
       const matchedRule = ACCOUNT_RULES.find(r => code.startsWith(r.prefix));
       const prefixLen = matchedRule?.prefix.length ?? 1;
-      const score = Math.min(95, 80 + prefixLen * 5);
+      let score = Math.min(95, 80 + prefixLen * 5);
+
+      // Consistency check: account class vs description keywords
+      const con = checkConsistency(code, text);
+      if (con.inconsistent) {
+        score = Math.min(score, 40);
+        return {
+          journal: accountJournal,
+          confidence: score,
+          level: levelFromScore(score),
+          reason: `Account prefix ${matchedRule?.prefix} → ${accountJournal}`,
+          inconsistency: con.message,
+          suggestion: `Account may be incorrect. Suggested: ${con.suggestedAccount} — ${con.suggestedLabel}`,
+          suggestedAccount: con.suggestedAccount,
+          suggestedAccountLabel: con.suggestedLabel,
+        };
+      }
+
       return {
         journal: accountJournal,
         confidence: score,
@@ -207,7 +276,7 @@ export function classifyWithConfidence(entry: JournalEntry): ClassificationResul
     }
   }
 
-  // 2) Keyword match (medium signal)
+  // 2) Keyword match
   const keywordJournal = classifyByKeyword(text);
   if (keywordJournal) {
     return {
@@ -219,7 +288,7 @@ export function classifyWithConfidence(entry: JournalEntry): ClassificationResul
     };
   }
 
-  // 3) Account exists but no specific rule matched
+  // 3) Account exists but no rule matched
   if (hasAccount) {
     return {
       journal: 'general',
