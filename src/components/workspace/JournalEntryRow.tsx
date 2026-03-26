@@ -154,7 +154,25 @@ export function JournalEntryRow({
       <td className="text-xs mono text-muted-foreground">{highlightMatch(e.reference, searchQuery)}</td>
       <td className="text-sm max-w-[200px]">
         <div className="truncate">{highlightMatch(e.description, searchQuery)}</div>
-        {conf && conf.suggestion && conf.level === 'low' && (
+        {conf && conf.inconsistency && (
+          <div className="flex items-center gap-1 mt-1 p-1 rounded bg-destructive/10 border border-destructive/20">
+            <Lightbulb className="h-3 w-3 text-destructive shrink-0" />
+            <span className="text-[10px] text-destructive font-medium truncate">{conf.inconsistency}</span>
+          </div>
+        )}
+        {conf && conf.suggestedAccount && (
+          <div className="flex items-center gap-1 mt-1">
+            <Lightbulb className="h-3 w-3 text-warning shrink-0" />
+            <span className="text-[10px] text-warning truncate">
+              Suggested: {conf.suggestedAccount} — {conf.suggestedAccountLabel}
+            </span>
+            <Button size="sm" variant="ghost" className="h-5 px-1.5 text-[10px] text-warning hover:text-warning ml-1"
+              onClick={(ev) => { ev.stopPropagation(); onApplySuggestion(e.id); }}>
+              Apply
+            </Button>
+          </div>
+        )}
+        {conf && conf.suggestion && !conf.suggestedAccount && conf.level === 'low' && (
           <div className="flex items-center gap-1 mt-1">
             <Lightbulb className="h-3 w-3 text-warning shrink-0" />
             <span className="text-[10px] text-warning truncate">{conf.suggestion}</span>
