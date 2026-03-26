@@ -14,6 +14,8 @@ export default function ReportsPage() {
   const validated = entries.filter(e => e.isValidated).length;
   const unmapped = mappings.filter(m => !m.isMapped).length;
   const rawFiles = files.filter(f => f.status === 'raw').length;
+  const importHistory = useImportMetaStore((s) => s.getImports(pid));
+  const { score: reliabilityScore, lastImportDate } = useImportMetaStore((s) => s.getReliabilityScore(pid));
 
   const reports = [
     {
