@@ -31,6 +31,7 @@ const App = () => (
             <Route path="overview" element={<OverviewPage />} />
             <Route path="data-center" element={<DataCenterPage />} />
             <Route path="mapping" element={<MappingPage />} />
+            <Route path="journal-classification" element={<JournalClassificationPage />} />
             <Route path="journal-entries" element={<JournalEntriesPage />} />
             <Route path="statements" element={<StatementsPage />} />
             <Route path="dashboard" element={<DashboardPage />} />
