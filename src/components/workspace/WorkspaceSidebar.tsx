@@ -2,6 +2,7 @@ import {
   LayoutDashboard,
   Database,
   GitBranch,
+  Tags,
   BookOpen,
   FileText,
   BarChart3,
@@ -29,6 +30,7 @@ import { useNavigate } from 'react-router-dom';
 const navItems = [
   { title: 'Overview', url: 'overview', icon: LayoutDashboard },
   { title: 'Data Center', url: 'data-center', icon: Database },
+  { title: 'Journal Classification', url: 'journal-classification', icon: Tags },
   { title: 'Mapping', url: 'mapping', icon: GitBranch },
   { title: 'Journal Entries', url: 'journal-entries', icon: BookOpen },
   { title: 'Financial Statements', url: 'statements', icon: FileText },
