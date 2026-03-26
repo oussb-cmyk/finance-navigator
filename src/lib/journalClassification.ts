@@ -155,46 +155,75 @@ interface ConsistencyRule {
   suggestedAccount: string;
   suggestedLabel: string;
   message: string;
+  /** 'critical' forces score to 20-30, 'warning' caps at 35-40 */
+  severity: 'critical' | 'warning';
 }
 
 const CONSISTENCY_RULES: ConsistencyRule[] = [
+  // Critical: Class 6 expenses with financing keywords (strong mismatch)
   { accountPrefix: '6', forbiddenPattern: /\b(emprunt|loan|prêt|crédit-bail|leasing|borrowing|remboursement\s*emprunt|dette\s*financière)\b/i,
     expectedJournal: 'financing', suggestedAccount: '164', suggestedLabel: 'Emprunts auprès des établissements de crédit',
-    message: 'Financing keywords detected in an expense account' },
+    message: 'Financing keywords detected in an expense account', severity: 'critical' },
+  // Critical: Class 6 expenses with sales keywords
   { accountPrefix: '6', forbiddenPattern: /\b(facture\s*client|vente|sale|revenue|chiffre\s*d'affaires)\b/i,
     expectedJournal: 'sales', suggestedAccount: '701', suggestedLabel: 'Ventes de produits finis',
-    message: 'Sales keywords detected in an expense account' },
+    message: 'Sales keywords detected in an expense account', severity: 'critical' },
+  // Critical: Class 7 revenue with purchase keywords
   { accountPrefix: '7', forbiddenPattern: /\b(achat|fournisseur|purchase|supplier|vendor|facture\s*fourn|procurement)\b/i,
     expectedJournal: 'purchases', suggestedAccount: '601', suggestedLabel: 'Achats stockés - Matières premières',
-    message: 'Purchase keywords detected in a revenue account' },
+    message: 'Purchase keywords detected in a revenue account', severity: 'critical' },
+  // Critical: Class 7 revenue with payroll keywords
   { accountPrefix: '7', forbiddenPattern: /\b(salaire|salary|paie|payroll|cotisation|urssaf)\b/i,
     expectedJournal: 'payroll', suggestedAccount: '641', suggestedLabel: 'Rémunérations du personnel',
-    message: 'Payroll keywords detected in a revenue account' },
+    message: 'Payroll keywords detected in a revenue account', severity: 'critical' },
+  // Warning: Class 5 bank with tax keywords
   { accountPrefix: '5', forbiddenPattern: /\b(tva|vat|tax|taxe|impôt|contribution|cfe|cvae)\b/i,
     expectedJournal: 'tax', suggestedAccount: '445', suggestedLabel: 'État - Taxes sur le chiffre d\'affaires',
-    message: 'Tax keywords detected in a bank/cash account' },
+    message: 'Tax keywords detected in a bank/cash account', severity: 'warning' },
+  // Warning: Class 10 equity with purchase keywords
   { accountPrefix: '10', forbiddenPattern: /\b(achat|purchase|fournisseur|supplier|facture\s*fourn)\b/i,
     expectedJournal: 'purchases', suggestedAccount: '401', suggestedLabel: 'Fournisseurs',
-    message: 'Purchase keywords detected in an equity account' },
+    message: 'Purchase keywords detected in an equity account', severity: 'warning' },
+  // Critical: Supplier account 401 with sales keywords
   { accountPrefix: '401', forbiddenPattern: /\b(facture\s*client|vente|sale|revenue|client)\b/i,
     expectedJournal: 'sales', suggestedAccount: '411', suggestedLabel: 'Clients',
-    message: 'Sales keywords detected in a supplier account' },
+    message: 'Sales keywords detected in a supplier account', severity: 'critical' },
+  // Critical: Client account 411 with purchase keywords
   { accountPrefix: '411', forbiddenPattern: /\b(achat|fournisseur|purchase|supplier|vendor)\b/i,
     expectedJournal: 'purchases', suggestedAccount: '401', suggestedLabel: 'Fournisseurs',
-    message: 'Purchase keywords detected in a client account' },
+    message: 'Purchase keywords detected in a client account', severity: 'critical' },
 ];
 
-function checkConsistency(code: string, text: string): {
-  inconsistent: boolean; penalty: number; message: string;
-  suggestedAccount?: string; suggestedLabel?: string; expectedJournal?: JournalType;
-} {
+interface ConsistencyCheckResult {
+  inconsistent: boolean;
+  severity: 'critical' | 'warning';
+  /** Penalty subtracted from base score */
+  penalty: number;
+  /** Hard ceiling for the final score */
+  maxScore: number;
+  message: string;
+  suggestedAccount?: string;
+  suggestedLabel?: string;
+  expectedJournal?: JournalType;
+}
+
+function checkConsistency(code: string, text: string): ConsistencyCheckResult {
   for (const rule of CONSISTENCY_RULES) {
     if (code.startsWith(rule.accountPrefix) && rule.forbiddenPattern.test(text)) {
-      return { inconsistent: true, penalty: 50, message: rule.message,
-        suggestedAccount: rule.suggestedAccount, suggestedLabel: rule.suggestedLabel, expectedJournal: rule.expectedJournal };
+      const isCritical = rule.severity === 'critical';
+      return {
+        inconsistent: true,
+        severity: rule.severity,
+        penalty: isCritical ? 60 : 45,
+        maxScore: isCritical ? 25 : 40,
+        message: rule.message,
+        suggestedAccount: rule.suggestedAccount,
+        suggestedLabel: rule.suggestedLabel,
+        expectedJournal: rule.expectedJournal,
+      };
     }
   }
-  return { inconsistent: false, penalty: 0, message: '' };
+  return { inconsistent: false, severity: 'warning', penalty: 0, maxScore: 100, message: '' };
 }
 
 // ── Confidence scoring ──────────────────────────────────────────────
