@@ -9,7 +9,9 @@ const COLORS = ['hsl(173,58%,39%)', 'hsl(210,92%,45%)', 'hsl(38,92%,50%)', 'hsl(
 
 export default function DashboardPage() {
   const { projectId } = useParams();
-  const entries = useProjectEntries(projectId || '');
+  const pid = projectId || '';
+  const entries = useProjectEntries(pid);
+  const { score: reliabilityScore, lastImportDate } = useImportMetaStore((s) => s.getReliabilityScore(pid));
 
   const sumByPrefix = (prefixes: string[], field: 'debit' | 'credit') =>
     entries.filter(e => prefixes.some(p => e.accountCode.startsWith(p))).reduce((s, e) => s + e[field], 0);
