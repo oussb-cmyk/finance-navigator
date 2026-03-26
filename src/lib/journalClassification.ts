@@ -84,14 +84,27 @@ const ACCOUNT_RULES: AccountRule[] = ([
   // Class 7 — Revenue
   { prefix: '7', journal: 'sales' },
 
-  // Classes 1–3 → General
+  // Class 1 — Equity & Capital (detailed)
+  { prefix: '16', journal: 'financing' },
+  { prefix: '17', journal: 'financing' },
+  { prefix: '168', journal: 'financing' },
+  { prefix: '164', journal: 'financing' },
   { prefix: '1', journal: 'general' },
-  { prefix: '2', journal: 'general' },
-  { prefix: '3', journal: 'general' },
 
-  // Class 4 & 5 catch-all
+  // Class 2 — Fixed Assets
+  { prefix: '28', journal: 'general' },
+  { prefix: '2', journal: 'general' },
+
+  // Class 3 — Inventory → Purchases (stock is part of purchasing cycle)
+  { prefix: '3', journal: 'purchases' },
+
+  // Class 4 catch-all (misc third parties)
+  { prefix: '44', journal: 'tax' },
   { prefix: '4', journal: 'general' },
-  { prefix: '5', journal: 'general' },
+
+  // Class 5 catch-all
+  { prefix: '51', journal: 'bank' },
+  { prefix: '5', journal: 'bank' },
 ] as AccountRule[]).sort((a, b) => b.prefix.length - a.prefix.length);
 
 // ── Keyword rules ───────────────────────────────────────────────────
