@@ -241,8 +241,8 @@ export default function JournalClassificationPage() {
       });
       setProjectEntries(projectId, updated);
       recordCorrection(projectId, {
-        original: { accountCode: entries.find(e => e.id === entryId)?.accountCode || '', journalType: conf.journal },
-        corrected: { accountCode: conf.suggestedAccount!, journalType: conf.journal },
+        original: { accountCode: entries.find(e => e.id === entryId)?.accountCode || '' },
+        corrected: { accountCode: conf.suggestedAccount! },
         timestamp: Date.now(),
       });
     } else {
