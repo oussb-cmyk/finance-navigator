@@ -9,6 +9,7 @@ import { WorkspaceLayout } from "./components/workspace/WorkspaceLayout";
 import OverviewPage from "./pages/workspace/OverviewPage";
 import DataCenterPage from "./pages/workspace/DataCenterPage";
 import MappingPage from "./pages/workspace/MappingPage";
+import JournalClassificationPage from "./pages/workspace/JournalClassificationPage";
 import JournalEntriesPage from "./pages/workspace/JournalEntriesPage";
 import StatementsPage from "./pages/workspace/StatementsPage";
 import DashboardPage from "./pages/workspace/DashboardPage";
