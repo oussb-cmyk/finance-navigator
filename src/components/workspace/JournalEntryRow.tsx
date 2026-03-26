@@ -102,7 +102,7 @@ export function JournalEntryRow({
     setForm((f) => ({ ...f, accountCode: code, accountName: name }));
   }, []);
 
-  const rowBg = conf ? confidenceRowBg(conf.level) : '';
+  const rowBg = conf ? confidenceRowBg(conf) : '';
 
   if (editing) {
     return (
