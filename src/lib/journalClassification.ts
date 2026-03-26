@@ -92,7 +92,7 @@ const ACCOUNT_RULES: AccountRule[] = ([
   // Class 4 & 5 catch-all
   { prefix: '4', journal: 'general' },
   { prefix: '5', journal: 'general' },
-].sort((a, b) => b.prefix.length - a.prefix.length);
+] as AccountRule[]).sort((a, b) => b.prefix.length - a.prefix.length);
 
 // ── Keyword rules ───────────────────────────────────────────────────
 
