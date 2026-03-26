@@ -142,10 +142,10 @@ export function ImportPreviewDialog({
 
         {/* Issue Summary Panel */}
         {hasIssues && (
-          <div className="border border-border rounded-lg p-3 space-y-3">
-            <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-              <AlertTriangle className="h-3.5 w-3.5 text-warning" />
-              {quality.issues.length} issue{quality.issues.length !== 1 ? 's' : ''} detected — review, fix, or continue
+          <div className={`border ${issueBorderColor} ${issueBgColor} rounded-lg p-3 space-y-3`}>
+            <p className={`text-sm font-bold ${issueTextColor} flex items-center gap-2`}>
+              <AlertTriangle className="h-4 w-4" />
+              {issueCount} issue{issueCount !== 1 ? 's' : ''} detected — these may affect financial accuracy
             </p>
 
             <div className="flex flex-wrap gap-2">
