@@ -395,9 +395,9 @@ export default function JournalClassificationPage() {
                               onCheckedChange={() => toggleSelect(e.id)}
                             />
                           </td>
-                          <td className="text-xs mono">{e.date}</td>
-                          <td className="text-xs mono text-muted-foreground">{e.reference}</td>
-                          <td className="text-sm max-w-[250px] truncate">{e.description}</td>
+                          <td className="text-xs mono">{highlightMatch(e.date, searchFilters.query)}</td>
+                          <td className="text-xs mono text-muted-foreground">{highlightMatch(e.reference, searchFilters.query)}</td>
+                          <td className="text-sm max-w-[250px] truncate">{highlightMatch(e.description, searchFilters.query)}</td>
                           <td className="text-right mono text-sm">
                             {e.debit > 0 ? `${e.debit.toLocaleString()}` : ''}
                           </td>
