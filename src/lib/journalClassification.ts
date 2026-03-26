@@ -250,7 +250,7 @@ function levelFromScore(score: number): ClassificationConfidence {
 /**
  * Classify a single entry and compute a confidence score.
  */
-export function classifyWithConfidence(entry: JournalEntry): ClassificationResult {
+export function classifyWithConfidence(entry: JournalEntry, learningBonus: number = 0): ClassificationResult {
   const code = (entry.accountCode || '').replace(/\D/g, '');
   const text = `${entry.description} ${entry.reference}`;
 
@@ -278,16 +278,24 @@ export function classifyWithConfidence(entry: JournalEntry): ClassificationResul
     if (accountJournal) {
       const matchedRule = ACCOUNT_RULES.find(r => code.startsWith(r.prefix));
       const prefixLen = matchedRule?.prefix.length ?? 1;
-      let score = Math.min(95, 80 + prefixLen * 5);
+      const baseScore = Math.min(95, 80 + prefixLen * 5);
 
       // Consistency check: account class vs description keywords
       const con = checkConsistency(code, text);
       if (con.inconsistent) {
-        score = Math.min(score, 40);
+        // Apply hard penalty: subtract penalty, then enforce ceiling
+        const penalizedScore = Math.max(10, baseScore - con.penalty);
+        const finalScore = Math.min(penalizedScore, con.maxScore);
+
+        // Debug safety: log if score somehow stayed high
+        if (finalScore >= 60) {
+          console.warn(`[Classification] Inconsistency detected but confidence=${finalScore} for account ${code}. This should not happen.`);
+        }
+
         return {
           journal: accountJournal,
-          confidence: score,
-          level: levelFromScore(score),
+          confidence: finalScore,
+          level: levelFromScore(finalScore),
           reason: `Account prefix ${matchedRule?.prefix} → ${accountJournal}`,
           inconsistency: con.message,
           suggestion: `Account may be incorrect. Suggested: ${con.suggestedAccount} — ${con.suggestedLabel}`,
@@ -296,10 +304,12 @@ export function classifyWithConfidence(entry: JournalEntry): ClassificationResul
         };
       }
 
+      // No inconsistency: apply learning bonus
+      const finalScore = Math.min(100, baseScore + learningBonus);
       return {
         journal: accountJournal,
-        confidence: score,
-        level: levelFromScore(score),
+        confidence: finalScore,
+        level: levelFromScore(finalScore),
         reason: `Account prefix ${matchedRule?.prefix} → ${accountJournal}`,
       };
     }
@@ -308,10 +318,11 @@ export function classifyWithConfidence(entry: JournalEntry): ClassificationResul
   // 2) Keyword match
   const keywordJournal = classifyByKeyword(text);
   if (keywordJournal) {
+    const finalScore = Math.min(80, 65 + learningBonus);
     return {
       journal: keywordJournal,
-      confidence: 65,
-      level: 'medium',
+      confidence: finalScore,
+      level: levelFromScore(finalScore),
       reason: `Keyword match in description → ${keywordJournal}`,
       suggestion: `Suggested: ${capitalize(keywordJournal)} (based on description keywords)`,
     };
@@ -321,7 +332,7 @@ export function classifyWithConfidence(entry: JournalEntry): ClassificationResul
   if (hasAccount) {
     return {
       journal: 'general',
-      confidence: 45,
+      confidence: Math.min(55, 45 + learningBonus),
       level: 'low',
       reason: 'Account exists but no specific classification rule matched',
       suggestion: 'Review and assign the correct journal type manually.',
