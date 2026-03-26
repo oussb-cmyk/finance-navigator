@@ -67,8 +67,13 @@ export function ImportPreviewDialog({
     setRows(deduped);
   }, [rows]);
 
-  const hasIssues = quality.issues.length > 0;
+  const issueCount = quality.issues.length;
+  const hasIssues = issueCount > 0;
   const isBlocked = strictMode && hasIssues;
+  const issueLevel: 'none' | 'warn' | 'critical' = issueCount === 0 ? 'none' : issueCount <= 10 ? 'warn' : 'critical';
+  const issueBorderColor = issueLevel === 'critical' ? 'border-destructive/40' : 'border-warning/40';
+  const issueBgColor = issueLevel === 'critical' ? 'bg-destructive/10' : 'bg-warning/10';
+  const issueTextColor = issueLevel === 'critical' ? 'text-destructive' : 'text-warning';
 
   const getRowTooltip = (rowIdx: number): string | null => {
     const types = getRowIssueTypes(rowIdx, quality.issues);
@@ -107,25 +112,26 @@ export function ImportPreviewDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Quality Score + Issue Summary */}
+        {/* Quality Score + Issue Status */}
         <div className="flex flex-wrap items-center gap-3">
-          <div className={`flex items-center gap-2 border rounded-lg px-3 py-2 ${getQualityBg(quality.level)}`}>
-            <BarChart3 className={`h-4 w-4 ${getQualityColor(quality.level)}`} />
-            <span className={`text-sm font-bold ${getQualityColor(quality.level)}`}>{quality.score}%</span>
-            <span className="text-xs text-muted-foreground">Data Quality</span>
-          </div>
+          {hasIssues ? (
+            <div className={`flex items-center gap-2 border rounded-lg px-3 py-2 ${issueBgColor} ${issueBorderColor}`}>
+              <AlertTriangle className={`h-4 w-4 ${issueTextColor}`} />
+              <span className={`text-sm font-bold ${issueTextColor}`}>{issueCount} issue{issueCount !== 1 ? 's' : ''}</span>
+              <span className={`text-xs font-medium ${issueTextColor}`}>— action needed</span>
+            </div>
+          ) : (
+            <div className={`flex items-center gap-2 border rounded-lg px-3 py-2 ${getQualityBg(quality.level)}`}>
+              <CheckCircle2 className="h-4 w-4 text-success" />
+              <span className="text-sm font-bold text-success">No issues</span>
+              <span className="text-xs text-success/80">Ready to import</span>
+            </div>
+          )}
 
           <Badge variant="outline" className="text-xs gap-1">
-            <QualityIcon className={`h-3 w-3 ${getQualityColor(quality.level)}`} />
-            {quality.cleanRows}/{quality.totalRows} clean rows
+            <BarChart3 className={`h-3 w-3 ${getQualityColor(quality.level)}`} />
+            {quality.score}% quality · {quality.cleanRows}/{quality.totalRows} clean
           </Badge>
-
-          {quality.level === 'high' && !hasIssues && (
-            <Badge className="bg-success/10 text-success border-success/20 text-xs gap-1">
-              <CheckCircle2 className="h-3 w-3" />
-              Ready to import
-            </Badge>
-          )}
 
           {/* Strict Mode Toggle */}
           <div className="ml-auto flex items-center gap-2">
@@ -136,10 +142,10 @@ export function ImportPreviewDialog({
 
         {/* Issue Summary Panel */}
         {hasIssues && (
-          <div className="border border-border rounded-lg p-3 space-y-3">
-            <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-              <AlertTriangle className="h-3.5 w-3.5 text-warning" />
-              {quality.issues.length} issue{quality.issues.length !== 1 ? 's' : ''} detected — review, fix, or continue
+          <div className={`border ${issueBorderColor} ${issueBgColor} rounded-lg p-3 space-y-3`}>
+            <p className={`text-sm font-bold ${issueTextColor} flex items-center gap-2`}>
+              <AlertTriangle className="h-4 w-4" />
+              {issueCount} issue{issueCount !== 1 ? 's' : ''} detected — these may affect financial accuracy
             </p>
 
             <div className="flex flex-wrap gap-2">
@@ -164,27 +170,27 @@ export function ImportPreviewDialog({
               </div>
             )}
 
-            {/* 3 Action Buttons */}
+            {/* Action Buttons — Review is primary */}
             <div className="flex flex-wrap gap-2">
+              <Button size="sm" onClick={() => onOpenChange(false)}>
+                <Eye className="h-3.5 w-3.5 mr-1.5" />
+                Review & Fix
+              </Button>
               {!autoFixApplied && (
                 <Button variant="outline" size="sm" onClick={handleAutoFix}>
                   <Wand2 className="h-3.5 w-3.5 mr-1.5" />
                   Fix Automatically
                 </Button>
               )}
-              <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
-                <Eye className="h-3.5 w-3.5 mr-1.5" />
-                Review & Fix Manually
-              </Button>
               {!strictMode && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="text-muted-foreground"
+                  className="text-muted-foreground text-xs"
                   onClick={() => onConfirm(rows)}
                   disabled={rows.length === 0}
                 >
-                  Import Anyway (Ignore Issues)
+                  Import Anyway
                 </Button>
               )}
             </div>
