@@ -1,68 +1,179 @@
 import type { JournalEntry, JournalType } from '@/types/finance';
 
-interface ClassificationRule {
-  type: JournalType;
-  descriptionKeywords: RegExp;
-  accountRanges?: [number, number][];
-  referencePatterns?: RegExp;
+/**
+ * Full French Plan Comptable Général (PCG) classification engine.
+ * Priority: 1) Account number prefix  2) Description keywords  3) Fallback "general"
+ */
+
+// ── Account-prefix rules (PCG Classes 1–7) ──────────────────────────
+
+interface AccountRule {
+  /** Prefix string to match (longest-prefix wins) */
+  prefix: string;
+  journal: JournalType;
 }
 
-const RULES: ClassificationRule[] = [
+/**
+ * Order matters: longer prefixes are checked first so that e.g. "401" beats "4".
+ * The list is sorted by prefix length desc at module load.
+ */
+const ACCOUNT_RULES: AccountRule[] = [
+  // Class 4 — detailed sub-ranges
+  { prefix: '401', journal: 'purchases' },
+  { prefix: '402', journal: 'purchases' },
+  { prefix: '403', journal: 'purchases' },
+  { prefix: '404', journal: 'purchases' },
+  { prefix: '405', journal: 'purchases' },
+  { prefix: '406', journal: 'purchases' },
+  { prefix: '407', journal: 'purchases' },
+  { prefix: '408', journal: 'purchases' },
+  { prefix: '411', journal: 'sales' },
+  { prefix: '412', journal: 'sales' },
+  { prefix: '413', journal: 'sales' },
+  { prefix: '414', journal: 'sales' },
+  { prefix: '415', journal: 'sales' },
+  { prefix: '416', journal: 'sales' },
+  { prefix: '417', journal: 'sales' },
+  { prefix: '418', journal: 'sales' },
+  { prefix: '421', journal: 'payroll' },
+  { prefix: '422', journal: 'payroll' },
+  { prefix: '423', journal: 'payroll' },
+  { prefix: '424', journal: 'payroll' },
+  { prefix: '425', journal: 'payroll' },
+  { prefix: '426', journal: 'payroll' },
+  { prefix: '427', journal: 'payroll' },
+  { prefix: '428', journal: 'payroll' },
+  { prefix: '431', journal: 'payroll' },
+  { prefix: '432', journal: 'payroll' },
+  { prefix: '433', journal: 'payroll' },
+  { prefix: '434', journal: 'payroll' },
+  { prefix: '435', journal: 'payroll' },
+  { prefix: '436', journal: 'payroll' },
+  { prefix: '437', journal: 'payroll' },
+  { prefix: '445', journal: 'tax' },
+  { prefix: '447', journal: 'tax' },
+
+  // Class 5 — Cash & Bank
+  { prefix: '512', journal: 'bank' },
+  { prefix: '514', journal: 'bank' },
+  { prefix: '515', journal: 'bank' },
+  { prefix: '516', journal: 'bank' },
+  { prefix: '517', journal: 'bank' },
+  { prefix: '518', journal: 'bank' },
+  { prefix: '519', journal: 'bank' },
+  { prefix: '53', journal: 'cash' },
+  { prefix: '54', journal: 'cash' },
+  { prefix: '58', journal: 'bank' },
+
+  // Class 6 — Expenses (sub-detail)
+  { prefix: '641', journal: 'payroll' },
+  { prefix: '642', journal: 'payroll' },
+  { prefix: '643', journal: 'payroll' },
+  { prefix: '644', journal: 'payroll' },
+  { prefix: '645', journal: 'payroll' },
+  { prefix: '646', journal: 'payroll' },
+  { prefix: '647', journal: 'payroll' },
+  { prefix: '648', journal: 'payroll' },
+  { prefix: '631', journal: 'tax' },
+  { prefix: '635', journal: 'tax' },
+  { prefix: '637', journal: 'tax' },
+  { prefix: '64', journal: 'payroll' },
+  { prefix: '63', journal: 'tax' },
+  { prefix: '6', journal: 'purchases' },
+
+  // Class 7 — Revenue
+  { prefix: '7', journal: 'sales' },
+
+  // Classes 1–3 → General
+  { prefix: '1', journal: 'general' },
+  { prefix: '2', journal: 'general' },
+  { prefix: '3', journal: 'general' },
+
+  // Class 4 & 5 catch-all
+  { prefix: '4', journal: 'general' },
+  { prefix: '5', journal: 'general' },
+].sort((a, b) => b.prefix.length - a.prefix.length);
+
+// ── Keyword rules ───────────────────────────────────────────────────
+
+interface KeywordRule {
+  journal: JournalType;
+  pattern: RegExp;
+}
+
+const KEYWORD_RULES: KeywordRule[] = [
   {
-    type: 'sales',
-    descriptionKeywords: /\b(sale|vente|invoice|facture\s*client|revenue|chiffre|CA|product\s*revenue|service\s*revenue)\b/i,
-    accountRanges: [[700, 709], [411, 411]],
-    referencePatterns: /^(VE|FAC|INV|SA)/i,
+    journal: 'sales',
+    pattern: /\b(facture\s*client|vente|sale|invoice|revenue|chiffre\s*d'affaires|CA\b|product\s*revenue|service\s*revenue)\b/i,
   },
   {
-    type: 'purchases',
-    descriptionKeywords: /\b(purchase|achat|fournisseur|supplier|vendor|expense|charge|facture\s*fourn|procurement)\b/i,
-    accountRanges: [[600, 629], [401, 401]],
-    referencePatterns: /^(ACH|HA|PO|AP)/i,
+    journal: 'purchases',
+    pattern: /\b(achat|fournisseur|purchase|supplier|vendor|expense|charge|facture\s*fourn|procurement)\b/i,
   },
   {
-    type: 'bank',
-    descriptionKeywords: /\b(bank|banque|virement|transfer|wire|sepa|prélèvement|direct\s*debit|cheque|chèque|cb\b|carte\s*bancaire)\b/i,
-    accountRanges: [[512, 519]],
-    referencePatterns: /^(BQ|BK|VIR)/i,
+    journal: 'bank',
+    pattern: /\b(banque|bank|virement|transfer|wire|sepa|prélèvement|direct\s*debit|cheque|chèque|cb\b|carte\s*bancaire)\b/i,
   },
   {
-    type: 'cash',
-    descriptionKeywords: /\b(cash|caisse|espèces|petty\s*cash|liquide)\b/i,
-    accountRanges: [[530, 539]],
-    referencePatterns: /^(CA|CSH)/i,
+    journal: 'cash',
+    pattern: /\b(caisse|cash|espèces|petty\s*cash|liquide)\b/i,
+  },
+  {
+    journal: 'payroll',
+    pattern: /\b(salaire|salary|paie|payroll|employee|cotisation|social\s*charge|urssaf|retraite|mutuelle)\b/i,
+  },
+  {
+    journal: 'tax',
+    pattern: /\b(tva|vat|tax|taxe|impôt|contribution|cfe|cvae|is\b|ir\b)\b/i,
   },
 ];
 
-function matchAccountRange(code: string, ranges: [number, number][]): boolean {
-  const num = parseInt(code, 10);
-  if (isNaN(num)) return false;
-  return ranges.some(([min, max]) => num >= min && num <= max);
-}
+// ── Public API ──────────────────────────────────────────────────────
 
+/**
+ * Classify a single entry.
+ * Returns the detected JournalType using PCG account-prefix first,
+ * then keyword matching, then defaults to 'general'.
+ */
 export function detectJournalType(entry: JournalEntry): JournalType {
-  let bestMatch: JournalType = 'general';
-  let bestScore = 0;
+  const code = (entry.accountCode || '').replace(/\D/g, '');
 
-  for (const rule of RULES) {
-    let score = 0;
-
-    if (rule.descriptionKeywords.test(entry.description)) score += 3;
-    if (rule.referencePatterns && rule.referencePatterns.test(entry.reference)) score += 2;
-    if (rule.accountRanges && entry.accountCode && matchAccountRange(entry.accountCode, rule.accountRanges)) score += 4;
-
-    if (score > bestScore) {
-      bestScore = score;
-      bestMatch = rule.type;
+  // 1) Account-prefix match (highest priority)
+  if (code.length > 0) {
+    for (const rule of ACCOUNT_RULES) {
+      if (code.startsWith(rule.prefix)) {
+        return rule.journal;
+      }
     }
   }
 
-  return bestMatch;
+  // 2) Keyword match on description + reference
+  const text = `${entry.description} ${entry.reference}`;
+  let bestKeyword: JournalType | null = null;
+  for (const rule of KEYWORD_RULES) {
+    if (rule.pattern.test(text)) {
+      bestKeyword = rule.journal;
+      break;
+    }
+  }
+  if (bestKeyword) return bestKeyword;
+
+  // 3) Fallback
+  return 'general';
 }
 
+/** Classify all entries that don't already have a journalType. */
 export function classifyEntries(entries: JournalEntry[]): JournalEntry[] {
-  return entries.map(e => ({
+  return entries.map((e) => ({
     ...e,
     journalType: e.journalType || detectJournalType(e),
+  }));
+}
+
+/** Re-classify all entries (overwrite existing). */
+export function reclassifyEntries(entries: JournalEntry[]): JournalEntry[] {
+  return entries.map((e) => ({
+    ...e,
+    journalType: detectJournalType(e),
   }));
 }
