@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import type { JournalEntry, JournalType } from '@/types/finance';
 import type { ClassificationResult } from '@/lib/journalClassification';
 import { JOURNAL_TYPES } from '@/types/finance';
@@ -6,13 +6,14 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { AccountAutocomplete } from '@/components/workspace/AccountAutocomplete';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
   Tooltip, TooltipContent, TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { Lightbulb, Pencil, Check, X } from 'lucide-react';
+import { Lightbulb, Pencil, Check, X, RefreshCw } from 'lucide-react';
 
 /* ── Colour helpers ─────────────────────────────────────────── */
 const JOURNAL_DOT: Record<JournalType, string> = {
@@ -42,6 +43,7 @@ interface JournalEntryRowProps {
   entry: JournalEntry;
   conf: ClassificationResult | undefined;
   selected: boolean;
+  projectId: string;
   onToggleSelect: (id: string) => void;
   onChangeJournal: (id: string, type: JournalType) => void;
   onUpdateEntry: (updated: JournalEntry) => void;
@@ -51,7 +53,7 @@ interface JournalEntryRowProps {
 }
 
 export function JournalEntryRow({
-  entry: e, conf, selected, onToggleSelect, onChangeJournal,
+  entry: e, conf, selected, projectId, onToggleSelect, onChangeJournal,
   onUpdateEntry, onApplySuggestion, highlightMatch, searchQuery,
 }: JournalEntryRowProps) {
   const [editing, setEditing] = useState(false);
@@ -59,6 +61,15 @@ export function JournalEntryRow({
     date: e.date, accountCode: e.accountCode, accountName: e.accountName,
     description: e.description, debit: String(e.debit || ''), credit: String(e.credit || ''),
   });
+  const [justUpdated, setJustUpdated] = useState(false);
+
+  // Flash "recomputed" indicator briefly after an update
+  useEffect(() => {
+    if (justUpdated) {
+      const t = setTimeout(() => setJustUpdated(false), 2000);
+      return () => clearTimeout(t);
+    }
+  }, [justUpdated]);
 
   const startEdit = useCallback(() => {
     setForm({
@@ -83,7 +94,12 @@ export function JournalEntryRow({
       credit,
     });
     setEditing(false);
+    setJustUpdated(true);
   }, [e, form, onUpdateEntry]);
+
+  const handleAccountSelect = useCallback((code: string, name: string) => {
+    setForm((f) => ({ ...f, accountCode: code, accountName: name }));
+  }, []);
 
   const rowBg = conf ? confidenceRowBg(conf.level) : '';
 
@@ -98,8 +114,13 @@ export function JournalEntryRow({
         <td className="text-xs mono text-muted-foreground">{e.reference}</td>
         <td>
           <div className="flex gap-1">
-            <Input value={form.accountCode} onChange={(ev) => setForm({ ...form, accountCode: ev.target.value })}
-              placeholder="Account #" className="h-7 text-xs w-[80px] mono" />
+            <AccountAutocomplete
+              projectId={projectId}
+              value={form.accountCode}
+              onChange={handleAccountSelect}
+              className="w-[100px]"
+              placeholder="Account #"
+            />
             <Input value={form.description} onChange={(ev) => setForm({ ...form, description: ev.target.value })}
               placeholder="Description" className="h-7 text-xs flex-1" />
           </div>
@@ -127,7 +148,7 @@ export function JournalEntryRow({
   }
 
   return (
-    <tr className={`${rowBg} group cursor-pointer hover:bg-muted/30`} onDoubleClick={startEdit}>
+    <tr className={`${rowBg} group cursor-pointer hover:bg-muted/30 ${justUpdated ? 'animate-pulse' : ''}`} onDoubleClick={startEdit}>
       <td><Checkbox checked={selected} onCheckedChange={() => onToggleSelect(e.id)} /></td>
       <td className="text-xs mono">{highlightMatch(e.date, searchQuery)}</td>
       <td className="text-xs mono text-muted-foreground">{highlightMatch(e.reference, searchQuery)}</td>
@@ -165,6 +186,14 @@ export function JournalEntryRow({
       </td>
       <td className="text-center">
         <div className="flex items-center justify-center gap-1">
+          {justUpdated && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <RefreshCw className="h-3 w-3 text-info animate-spin" />
+              </TooltipTrigger>
+              <TooltipContent side="left"><p className="text-xs">Recomputed</p></TooltipContent>
+            </Tooltip>
+          )}
           {conf && (
             <Tooltip>
               <TooltipTrigger asChild>
