@@ -92,15 +92,21 @@ export default function JournalClassificationPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkType, setBulkType] = useState<JournalType | ''>('');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [searchFilters, setSearchFilters] = useState<SearchFilters>({ query: '', amountMin: '', amountMax: '', dateFrom: '', dateTo: '' });
 
   /* ── Derived data ─────────────────────────────────────── */
   const unclassified = useMemo(() => entries.filter((e) => !e.journalType).length, [entries]);
 
-  const filteredEntries = useMemo(() => {
+  const journalFiltered = useMemo(() => {
     if (filterJournal === 'all') return entries;
     if (filterJournal === 'unclassified') return entries.filter((e) => !e.journalType);
     return entries.filter((e) => e.journalType === filterJournal);
   }, [entries, filterJournal]);
+
+  const filteredEntries = useMemo(
+    () => applySearchFilters(journalFiltered, searchFilters) as JournalEntry[],
+    [journalFiltered, searchFilters],
+  );
 
   const journalCounts = useMemo(() => {
     const counts: Record<string, number> = { unclassified: 0 };
