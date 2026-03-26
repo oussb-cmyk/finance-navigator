@@ -34,6 +34,7 @@ export default function JournalEntriesPage() {
       credit: parseFloat(form.credit) || 0,
       isValidated: false,
       source: 'Manual Entry',
+      journalType: 'general',
     };
     addEntry(projectId, entry);
     setForm({ date: '', reference: '', description: '', accountCode: '', accountName: '', debit: '', credit: '' });
