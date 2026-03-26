@@ -112,25 +112,26 @@ export function ImportPreviewDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Quality Score + Issue Summary */}
+        {/* Quality Score + Issue Status */}
         <div className="flex flex-wrap items-center gap-3">
-          <div className={`flex items-center gap-2 border rounded-lg px-3 py-2 ${getQualityBg(quality.level)}`}>
-            <BarChart3 className={`h-4 w-4 ${getQualityColor(quality.level)}`} />
-            <span className={`text-sm font-bold ${getQualityColor(quality.level)}`}>{quality.score}%</span>
-            <span className="text-xs text-muted-foreground">Data Quality</span>
-          </div>
+          {hasIssues ? (
+            <div className={`flex items-center gap-2 border rounded-lg px-3 py-2 ${issueBgColor} ${issueBorderColor}`}>
+              <AlertTriangle className={`h-4 w-4 ${issueTextColor}`} />
+              <span className={`text-sm font-bold ${issueTextColor}`}>{issueCount} issue{issueCount !== 1 ? 's' : ''}</span>
+              <span className={`text-xs font-medium ${issueTextColor}`}>— action needed</span>
+            </div>
+          ) : (
+            <div className={`flex items-center gap-2 border rounded-lg px-3 py-2 ${getQualityBg(quality.level)}`}>
+              <CheckCircle2 className="h-4 w-4 text-success" />
+              <span className="text-sm font-bold text-success">No issues</span>
+              <span className="text-xs text-success/80">Ready to import</span>
+            </div>
+          )}
 
           <Badge variant="outline" className="text-xs gap-1">
-            <QualityIcon className={`h-3 w-3 ${getQualityColor(quality.level)}`} />
-            {quality.cleanRows}/{quality.totalRows} clean rows
+            <BarChart3 className={`h-3 w-3 ${getQualityColor(quality.level)}`} />
+            {quality.score}% quality · {quality.cleanRows}/{quality.totalRows} clean
           </Badge>
-
-          {quality.level === 'high' && !hasIssues && (
-            <Badge className="bg-success/10 text-success border-success/20 text-xs gap-1">
-              <CheckCircle2 className="h-3 w-3" />
-              Ready to import
-            </Badge>
-          )}
 
           {/* Strict Mode Toggle */}
           <div className="ml-auto flex items-center gap-2">
