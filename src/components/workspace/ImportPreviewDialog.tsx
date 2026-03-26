@@ -14,7 +14,7 @@ import { Switch } from '@/components/ui/switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   CheckCircle2, AlertTriangle, XCircle, Wand2, ShieldCheck, BarChart3, Info,
-  Copy, Trash2, Eye,
+  Copy, Trash2, Eye, ArrowLeft,
 } from 'lucide-react';
 import type { ImportRow } from '@/lib/dataQuality';
 import {
@@ -22,6 +22,7 @@ import {
   removeDuplicates,
 } from '@/lib/dataQuality';
 import type { DataQualityResult, IssueType } from '@/lib/dataQuality';
+import { ReviewTable } from './ReviewTable';
 
 interface ImportPreviewDialogProps {
   open: boolean;
@@ -62,6 +63,7 @@ export function ImportPreviewDialog({
   const [strictMode, setStrictMode] = useState(false);
   const [showConfirmWarning, setShowConfirmWarning] = useState(false);
   const [totalFixCount, setTotalFixCount] = useState(0);
+  const [viewMode, setViewMode] = useState<'preview' | 'review'>('preview');
 
   const quality: DataQualityResult = useMemo(() => analyzeQuality(rows), [rows]);
   const initialQuality: DataQualityResult = useMemo(() => analyzeQuality(initialRows), [initialRows]);
@@ -85,6 +87,11 @@ export function ImportPreviewDialog({
     setRows(deduped);
     setTotalFixCount(prev => prev + removedCount);
   }, [rows]);
+
+  const handleReviewRowsChange = useCallback((updatedRows: ImportRow[]) => {
+    setRows(updatedRows);
+    setTotalFixCount(prev => prev + 1);
+  }, []);
 
   const issueCount = quality.issues.length;
   const hasIssues = issueCount > 0;
@@ -141,17 +148,24 @@ export function ImportPreviewDialog({
         <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
+              {viewMode === 'review' && (
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0 mr-1" onClick={() => setViewMode('preview')}>
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+              )}
               <ShieldCheck className="h-5 w-5 text-primary" />
-              Import Preview — {fileName}
+              {viewMode === 'preview' ? `Import Preview — ${fileName}` : `Review & Fix — ${fileName}`}
             </DialogTitle>
             <DialogDescription>
-              {mode === 'template'
-                ? 'Template import — assisted validation enabled.'
-                : 'AI parsing — review recommended.'}
+              {viewMode === 'preview'
+                ? (mode === 'template'
+                    ? 'Template import — assisted validation enabled.'
+                    : 'AI parsing — review recommended.')
+                : 'Fix issues inline — changes are validated in real time.'}
             </DialogDescription>
           </DialogHeader>
 
-          {/* Quality Score + Issue Status */}
+          {/* Quality Score + Issue Status — always visible */}
           <div className="flex flex-wrap items-center gap-3">
             {hasIssues ? (
               <div className={`flex items-center gap-2 border rounded-lg px-3 py-2 ${issueBgColor} ${issueBorderColor}`}>
@@ -172,166 +186,189 @@ export function ImportPreviewDialog({
               {quality.score}% quality · {quality.cleanRows}/{quality.totalRows} clean
             </Badge>
 
-            <div className="ml-auto flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Strict mode</span>
-              <Switch checked={strictMode} onCheckedChange={setStrictMode} />
-            </div>
+            {viewMode === 'preview' && (
+              <div className="ml-auto flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Strict mode</span>
+                <Switch checked={strictMode} onCheckedChange={setStrictMode} />
+              </div>
+            )}
           </div>
 
-          {/* Issue Summary Panel with Impact Analysis */}
-          {hasIssues && (
-            <div className={`border ${issueBorderColor} ${issueBgColor} rounded-lg p-3 space-y-3`}>
-              <p className={`text-sm font-bold ${issueTextColor} flex items-center gap-2`}>
-                <AlertTriangle className="h-4 w-4" />
-                {issueCount} issue{issueCount !== 1 ? 's' : ''} detected — these may affect financial accuracy
-              </p>
+          {/* ─── PREVIEW MODE ─── */}
+          {viewMode === 'preview' && (
+            <>
+              {/* Issue Summary Panel */}
+              {hasIssues && (
+                <div className={`border ${issueBorderColor} ${issueBgColor} rounded-lg p-3 space-y-3`}>
+                  <p className={`text-sm font-bold ${issueTextColor} flex items-center gap-2`}>
+                    <AlertTriangle className="h-4 w-4" />
+                    {issueCount} issue{issueCount !== 1 ? 's' : ''} detected — these may affect financial accuracy
+                  </p>
 
-              <div className="space-y-1.5">
-                {quality.summary.map((s) => (
-                  <div key={s.type} className="flex flex-col gap-0.5 bg-muted/50 rounded-md px-3 py-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-semibold text-foreground">{s.count}</span>
-                      <span className="text-xs text-muted-foreground">{s.label}</span>
+                  <div className="space-y-1.5">
+                    {quality.summary.map((s) => (
+                      <div key={s.type} className="flex flex-col gap-0.5 bg-muted/50 rounded-md px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-foreground">{s.count}</span>
+                          <span className="text-xs text-muted-foreground">{s.label}</span>
+                        </div>
+                        <span className="text-xs text-muted-foreground/80 italic pl-4">
+                          ⚠ {ISSUE_IMPACT[s.type]}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {duplicateCount > 0 && (
+                    <div className="flex items-center gap-2 bg-muted/50 rounded-md px-3 py-2">
+                      <Copy className="h-3.5 w-3.5 text-warning" />
+                      <span className="text-xs text-foreground font-medium">{duplicateCount} duplicate entries</span>
+                      <div className="ml-auto flex gap-1.5">
+                        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleRemoveDuplicates}>
+                          <Trash2 className="h-3 w-3 mr-1" />
+                          Remove duplicates
+                        </Button>
+                      </div>
                     </div>
-                    <span className="text-xs text-muted-foreground/80 italic pl-4">
-                      ⚠ {ISSUE_IMPACT[s.type]}
-                    </span>
-                  </div>
-                ))}
-              </div>
+                  )}
 
-              {/* Duplicate-specific actions */}
-              {duplicateCount > 0 && (
-                <div className="flex items-center gap-2 bg-muted/50 rounded-md px-3 py-2">
-                  <Copy className="h-3.5 w-3.5 text-warning" />
-                  <span className="text-xs text-foreground font-medium">{duplicateCount} duplicate entries</span>
-                  <div className="ml-auto flex gap-1.5">
-                    <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handleRemoveDuplicates}>
-                      <Trash2 className="h-3 w-3 mr-1" />
-                      Remove duplicates
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" onClick={() => setViewMode('review')}>
+                      <Eye className="h-3.5 w-3.5 mr-1.5" />
+                      Review & Fix
                     </Button>
+                    {!autoFixApplied && (
+                      <Button variant="outline" size="sm" onClick={handleAutoFix}>
+                        <Wand2 className="h-3.5 w-3.5 mr-1.5" />
+                        Fix Automatically
+                      </Button>
+                    )}
+                    {!strictMode && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground text-xs"
+                        onClick={handleImportClick}
+                        disabled={rows.length === 0}
+                      >
+                        Import Anyway
+                      </Button>
+                    )}
                   </div>
+
+                  {autoFixApplied && (
+                    <p className="text-xs text-success flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" />
+                      Auto-fix applied — quality recalculated
+                    </p>
+                  )}
                 </div>
               )}
 
-              {/* Action Buttons */}
-              <div className="flex flex-wrap gap-2">
-                <Button size="sm" onClick={() => onOpenChange(false)}>
-                  <Eye className="h-3.5 w-3.5 mr-1.5" />
-                  Review & Fix
-                </Button>
-                {!autoFixApplied && (
-                  <Button variant="outline" size="sm" onClick={handleAutoFix}>
-                    <Wand2 className="h-3.5 w-3.5 mr-1.5" />
-                    Fix Automatically
-                  </Button>
-                )}
-                {!strictMode && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-muted-foreground text-xs"
-                    onClick={handleImportClick}
-                    disabled={rows.length === 0}
-                  >
-                    Import Anyway
-                  </Button>
-                )}
-              </div>
+              {isBlocked && (
+                <Alert variant="destructive">
+                  <XCircle className="h-4 w-4" />
+                  <AlertDescription className="text-xs">
+                    Strict mode is ON — resolve all issues before importing, or turn off strict mode.
+                  </AlertDescription>
+                </Alert>
+              )}
 
-              {autoFixApplied && (
-                <p className="text-xs text-success flex items-center gap-1">
-                  <CheckCircle2 className="h-3 w-3" />
-                  Auto-fix applied — quality recalculated
+              {/* Preview Table */}
+              <TooltipProvider delayDuration={200}>
+                <ScrollArea className="flex-1 min-h-0 max-h-[380px] border border-border rounded-lg">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted/50 sticky top-0 z-10">
+                        <tr>
+                          <th className="px-2 py-2 text-left font-medium border-b border-border w-10">#</th>
+                          <th className="px-2 py-2 text-left font-medium border-b border-border">Date</th>
+                          <th className="px-2 py-2 text-left font-medium border-b border-border">Account</th>
+                          <th className="px-2 py-2 text-left font-medium border-b border-border">Name</th>
+                          <th className="px-2 py-2 text-left font-medium border-b border-border">Description</th>
+                          <th className="px-2 py-2 text-right font-medium border-b border-border">Debit</th>
+                          <th className="px-2 py-2 text-right font-medium border-b border-border">Credit</th>
+                          <th className="px-2 py-2 text-center font-medium border-b border-border w-16">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {previewRows.map((r, i) => {
+                          const issueTypes = getRowIssueTypes(i, quality.issues);
+                          const hasRowIssue = issueTypes.size > 0;
+                          const tooltip = getRowTooltip(i);
+
+                          const rowContent = (
+                            <tr key={i} className={`border-b border-border/50 ${hasRowIssue ? 'bg-destructive/[0.03]' : 'hover:bg-muted/30'}`}>
+                              <td className="px-2 py-1.5 text-muted-foreground mono">{i + 1}</td>
+                              <td className={`px-2 py-1.5 mono whitespace-nowrap ${getCellClass(i, 'date')}`}>{r.date}</td>
+                              <td className={`px-2 py-1.5 mono font-medium ${getCellClass(i, 'account')}`}>{r.accountCode || '—'}</td>
+                              <td className="px-2 py-1.5 truncate max-w-[140px]">{r.accountName}</td>
+                              <td className="px-2 py-1.5 truncate max-w-[180px] text-muted-foreground">{r.description}</td>
+                              <td className={`px-2 py-1.5 text-right mono ${getCellClass(i, 'amount')}`}>
+                                {r.debit > 0 ? r.debit.toLocaleString(undefined, { minimumFractionDigits: 2 }) : ''}
+                              </td>
+                              <td className={`px-2 py-1.5 text-right mono ${getCellClass(i, 'amount')}`}>
+                                {r.credit > 0 ? r.credit.toLocaleString(undefined, { minimumFractionDigits: 2 }) : ''}
+                              </td>
+                              <td className="px-2 py-1.5 text-center">
+                                {hasRowIssue
+                                  ? <AlertTriangle className="h-3.5 w-3.5 text-warning mx-auto" />
+                                  : <CheckCircle2 className="h-3.5 w-3.5 text-success mx-auto" />
+                                }
+                              </td>
+                            </tr>
+                          );
+
+                          if (tooltip) {
+                            return (
+                              <Tooltip key={i}>
+                                <TooltipTrigger asChild>{rowContent}</TooltipTrigger>
+                                <TooltipContent side="left" className="max-w-[240px] whitespace-pre-line text-xs">
+                                  {tooltip}
+                                </TooltipContent>
+                              </Tooltip>
+                            );
+                          }
+                          return rowContent;
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </ScrollArea>
+              </TooltipProvider>
+
+              {rows.length > MAX_PREVIEW && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Info className="h-3 w-3" />
+                  Showing first {MAX_PREVIEW} of {rows.length} rows
                 </p>
               )}
-            </div>
+            </>
           )}
 
-          {/* Strict mode block alert */}
-          {isBlocked && (
-            <Alert variant="destructive">
-              <XCircle className="h-4 w-4" />
-              <AlertDescription className="text-xs">
-                Strict mode is ON — resolve all issues before importing, or turn off strict mode.
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {/* Preview Table */}
-          <TooltipProvider delayDuration={200}>
-            <ScrollArea className="flex-1 min-h-0 max-h-[380px] border border-border rounded-lg">
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead className="bg-muted/50 sticky top-0 z-10">
-                    <tr>
-                      <th className="px-2 py-2 text-left font-medium border-b border-border w-10">#</th>
-                      <th className="px-2 py-2 text-left font-medium border-b border-border">Date</th>
-                      <th className="px-2 py-2 text-left font-medium border-b border-border">Account</th>
-                      <th className="px-2 py-2 text-left font-medium border-b border-border">Name</th>
-                      <th className="px-2 py-2 text-left font-medium border-b border-border">Description</th>
-                      <th className="px-2 py-2 text-right font-medium border-b border-border">Debit</th>
-                      <th className="px-2 py-2 text-right font-medium border-b border-border">Credit</th>
-                      <th className="px-2 py-2 text-center font-medium border-b border-border w-16">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {previewRows.map((r, i) => {
-                      const issueTypes = getRowIssueTypes(i, quality.issues);
-                      const hasRowIssue = issueTypes.size > 0;
-                      const tooltip = getRowTooltip(i);
-
-                      const rowContent = (
-                        <tr key={i} className={`border-b border-border/50 ${hasRowIssue ? 'bg-destructive/[0.03]' : 'hover:bg-muted/30'}`}>
-                          <td className="px-2 py-1.5 text-muted-foreground mono">{i + 1}</td>
-                          <td className={`px-2 py-1.5 mono whitespace-nowrap ${getCellClass(i, 'date')}`}>{r.date}</td>
-                          <td className={`px-2 py-1.5 mono font-medium ${getCellClass(i, 'account')}`}>{r.accountCode || '—'}</td>
-                          <td className="px-2 py-1.5 truncate max-w-[140px]">{r.accountName}</td>
-                          <td className="px-2 py-1.5 truncate max-w-[180px] text-muted-foreground">{r.description}</td>
-                          <td className={`px-2 py-1.5 text-right mono ${getCellClass(i, 'amount')}`}>
-                            {r.debit > 0 ? r.debit.toLocaleString(undefined, { minimumFractionDigits: 2 }) : ''}
-                          </td>
-                          <td className={`px-2 py-1.5 text-right mono ${getCellClass(i, 'amount')}`}>
-                            {r.credit > 0 ? r.credit.toLocaleString(undefined, { minimumFractionDigits: 2 }) : ''}
-                          </td>
-                          <td className="px-2 py-1.5 text-center">
-                            {hasRowIssue
-                              ? <AlertTriangle className="h-3.5 w-3.5 text-warning mx-auto" />
-                              : <CheckCircle2 className="h-3.5 w-3.5 text-success mx-auto" />
-                            }
-                          </td>
-                        </tr>
-                      );
-
-                      if (tooltip) {
-                        return (
-                          <Tooltip key={i}>
-                            <TooltipTrigger asChild>{rowContent}</TooltipTrigger>
-                            <TooltipContent side="left" className="max-w-[240px] whitespace-pre-line text-xs">
-                              {tooltip}
-                            </TooltipContent>
-                          </Tooltip>
-                        );
-                      }
-                      return rowContent;
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </ScrollArea>
-          </TooltipProvider>
-
-          {rows.length > MAX_PREVIEW && (
-            <p className="text-xs text-muted-foreground flex items-center gap-1">
-              <Info className="h-3 w-3" />
-              Showing first {MAX_PREVIEW} of {rows.length} rows
-            </p>
+          {/* ─── REVIEW MODE ─── */}
+          {viewMode === 'review' && (
+            <ReviewTable
+              rows={rows}
+              onRowsChange={handleReviewRowsChange}
+              issues={quality.issues}
+            />
           )}
 
           <DialogFooter className="pt-2 flex-wrap gap-2">
             <div className="text-xs text-muted-foreground flex-1">
               {quality.totalRows} rows · {quality.cleanRows} clean · {quality.issues.length} issues
             </div>
+            {viewMode === 'review' && hasIssues && (
+              <>
+                {!autoFixApplied && (
+                  <Button variant="outline" size="sm" onClick={handleAutoFix}>
+                    <Wand2 className="h-3.5 w-3.5 mr-1.5" />
+                    Fix All Automatically
+                  </Button>
+                )}
+              </>
+            )}
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button
               onClick={handleImportClick}
