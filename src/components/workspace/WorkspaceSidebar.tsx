@@ -2,6 +2,7 @@ import {
   LayoutDashboard,
   Database,
   GitBranch,
+  Tags,
   BookOpen,
   FileText,
   BarChart3,
