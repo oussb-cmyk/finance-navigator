@@ -232,8 +232,23 @@ export default function JournalClassificationPage() {
 
   const handleApplySuggestion = useCallback((entryId: string) => {
     const conf = confidenceMap.get(entryId);
-    if (conf) handleChangeJournal(entryId, conf.journal);
-  }, [confidenceMap, handleChangeJournal]);
+    if (!conf || !projectId) return;
+    // If there's a suggested account (from consistency check), apply the account change
+    if (conf.suggestedAccount) {
+      const updated = entries.map((e) => {
+        if (e.id !== entryId) return e;
+        return { ...e, accountCode: conf.suggestedAccount!, accountName: conf.suggestedAccountLabel || '' };
+      });
+      setProjectEntries(projectId, updated);
+      recordCorrection(projectId, {
+        original: { accountCode: entries.find(e => e.id === entryId)?.accountCode || '', journalType: conf.journal },
+        corrected: { accountCode: conf.suggestedAccount!, journalType: conf.journal },
+        timestamp: Date.now(),
+      });
+    } else {
+      handleChangeJournal(entryId, conf.journal);
+    }
+  }, [confidenceMap, handleChangeJournal, projectId, entries, setProjectEntries, recordCorrection]);
 
   const handleBulkApply = useCallback(() => {
     if (!projectId || !bulkType || selected.size === 0) return;
