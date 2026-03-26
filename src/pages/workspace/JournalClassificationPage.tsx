@@ -9,6 +9,7 @@ import type { JournalType, JournalEntry } from '@/types/finance';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
+import { JournalSearchFilters, applySearchFilters, highlightMatch, type SearchFilters } from '@/components/workspace/JournalSearchFilters';
 import {
   Select,
   SelectContent,
@@ -91,15 +92,21 @@ export default function JournalClassificationPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkType, setBulkType] = useState<JournalType | ''>('');
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [searchFilters, setSearchFilters] = useState<SearchFilters>({ query: '', amountMin: '', amountMax: '', dateFrom: '', dateTo: '' });
 
   /* ── Derived data ─────────────────────────────────────── */
   const unclassified = useMemo(() => entries.filter((e) => !e.journalType).length, [entries]);
 
-  const filteredEntries = useMemo(() => {
+  const journalFiltered = useMemo(() => {
     if (filterJournal === 'all') return entries;
     if (filterJournal === 'unclassified') return entries.filter((e) => !e.journalType);
     return entries.filter((e) => e.journalType === filterJournal);
   }, [entries, filterJournal]);
+
+  const filteredEntries = useMemo(
+    () => applySearchFilters(journalFiltered, searchFilters) as JournalEntry[],
+    [journalFiltered, searchFilters],
+  );
 
   const journalCounts = useMemo(() => {
     const counts: Record<string, number> = { unclassified: 0 };
@@ -286,6 +293,14 @@ export default function JournalClassificationPage() {
           )}
         </div>
 
+        {/* ── Search bar ─────────────────────────────────── */}
+        <JournalSearchFilters
+          filters={searchFilters}
+          onChange={setSearchFilters}
+          resultCount={filteredEntries.length}
+          totalCount={entries.length}
+        />
+
         {/* ── Bulk edit bar ────────────────────────────────── */}
         {selected.size > 0 && (
           <div className="bg-muted border border-border rounded-xl p-3 mb-4 flex items-center gap-3">
@@ -331,8 +346,8 @@ export default function JournalClassificationPage() {
                     <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
                   )}
                   <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${dotColor}`} />
-                  <span className="mono text-sm font-bold text-foreground">{group.accountCode || '—'}</span>
-                  <span className="text-sm text-muted-foreground truncate">{group.accountName}</span>
+                  <span className="mono text-sm font-bold text-foreground">{highlightMatch(group.accountCode || '—', searchFilters.query)}</span>
+                  <span className="text-sm text-muted-foreground truncate">{highlightMatch(group.accountName, searchFilters.query)}</span>
                   <Badge variant="secondary" className="ml-auto text-xs">
                     {group.entries.length}
                   </Badge>
@@ -380,9 +395,9 @@ export default function JournalClassificationPage() {
                               onCheckedChange={() => toggleSelect(e.id)}
                             />
                           </td>
-                          <td className="text-xs mono">{e.date}</td>
-                          <td className="text-xs mono text-muted-foreground">{e.reference}</td>
-                          <td className="text-sm max-w-[250px] truncate">{e.description}</td>
+                          <td className="text-xs mono">{highlightMatch(e.date, searchFilters.query)}</td>
+                          <td className="text-xs mono text-muted-foreground">{highlightMatch(e.reference, searchFilters.query)}</td>
+                          <td className="text-sm max-w-[250px] truncate">{highlightMatch(e.description, searchFilters.query)}</td>
                           <td className="text-right mono text-sm">
                             {e.debit > 0 ? `${e.debit.toLocaleString()}` : ''}
                           </td>
