@@ -302,6 +302,7 @@ export default function JournalClassificationPage() {
         />
 
         {/* ── Bulk edit bar ────────────────────────────────── */}
+        {selected.size > 0 && (
           <div className="bg-muted border border-border rounded-xl p-3 mb-4 flex items-center gap-3">
             <span className="text-sm font-medium">{selected.size} selected</span>
             <Select value={bulkType} onValueChange={(v) => setBulkType(v as JournalType)}>
