@@ -513,6 +513,7 @@ export default function JournalClassificationPage() {
                         <JournalEntryRow
                           key={e.id}
                           entry={e}
+                          projectId={pid}
                           conf={confidenceMap.get(e.id)}
                           selected={selected.has(e.id)}
                           onToggleSelect={toggleSelect}
