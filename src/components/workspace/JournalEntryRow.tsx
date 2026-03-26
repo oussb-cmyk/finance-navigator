@@ -30,8 +30,9 @@ function confidenceBadgeClass(level: 'high' | 'medium' | 'low'): string {
   }
 }
 
-function confidenceRowBg(level: 'high' | 'medium' | 'low'): string {
-  switch (level) {
+function confidenceRowBg(conf: ClassificationResult): string {
+  if (conf.inconsistency) return 'bg-destructive/10';
+  switch (conf.level) {
     case 'high': return '';
     case 'medium': return 'bg-warning/5';
     case 'low': return 'bg-destructive/5';
