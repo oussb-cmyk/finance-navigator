@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useProjectStore } from '@/store/useProjectStore';
 import { useImportMetaStore } from '@/store/useImportMetaStore';
@@ -14,8 +15,16 @@ export default function ReportsPage() {
   const validated = entries.filter(e => e.isValidated).length;
   const unmapped = mappings.filter(m => !m.isMapped).length;
   const rawFiles = files.filter(f => f.status === 'raw').length;
-  const importHistory = useImportMetaStore((s) => s.getImports(pid));
-  const { score: reliabilityScore, lastImportDate } = useImportMetaStore((s) => s.getReliabilityScore(pid));
+  const importHistory = useImportMetaStore((s) => s.imports[pid] || []);
+  const importMetas = useImportMetaStore((s) => s.imports[pid]);
+  const reliabilityData = useMemo(() => {
+    const metas = importMetas || [];
+    if (metas.length === 0) return { score: 0, lastImportDate: null };
+    const totalWeight = metas.reduce((sum, _, i) => sum + (i + 1), 0);
+    const weightedScore = metas.reduce((sum, m, i) => sum + m.qualityScore * (i + 1), 0);
+    return { score: Math.round(weightedScore / totalWeight), lastImportDate: metas[metas.length - 1].importDate };
+  }, [importMetas]);
+  const { score: reliabilityScore, lastImportDate } = reliabilityData;
 
   const reports = [
     {

@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import { useProjectEntries } from '@/hooks/useStableStoreSelectors';
 import { useImportMetaStore } from '@/store/useImportMetaStore';
@@ -11,7 +12,15 @@ export default function DashboardPage() {
   const { projectId } = useParams();
   const pid = projectId || '';
   const entries = useProjectEntries(pid);
-  const { score: reliabilityScore, lastImportDate } = useImportMetaStore((s) => s.getReliabilityScore(pid));
+  const importMetas = useImportMetaStore((s) => s.imports[pid]);
+  const reliabilityData = useMemo(() => {
+    const metas = importMetas || [];
+    if (metas.length === 0) return { score: 0, lastImportDate: null };
+    const totalWeight = metas.reduce((sum, _, i) => sum + (i + 1), 0);
+    const weightedScore = metas.reduce((sum, m, i) => sum + m.qualityScore * (i + 1), 0);
+    return { score: Math.round(weightedScore / totalWeight), lastImportDate: metas[metas.length - 1].importDate };
+  }, [importMetas]);
+  const { score: reliabilityScore, lastImportDate } = reliabilityData;
 
   const sumByPrefix = (prefixes: string[], field: 'debit' | 'credit') =>
     entries.filter(e => prefixes.some(p => e.accountCode.startsWith(p))).reduce((s, e) => s + e[field], 0);
