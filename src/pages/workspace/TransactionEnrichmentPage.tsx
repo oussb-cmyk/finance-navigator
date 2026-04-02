@@ -356,6 +356,7 @@ export default function TransactionEnrichmentPage() {
                 <TableHead className="text-xs min-w-[160px]">Poste</TableHead>
                 <TableHead className="text-xs min-w-[160px]">Cat. Tréso</TableHead>
                 <TableHead className="text-xs min-w-[160px]">Cat. P&L</TableHead>
+                <TableHead className="text-xs w-[80px]">Confidence</TableHead>
                 <TableHead className="text-xs">TVA</TableHead>
                 <TableHead className="text-xs">Entity</TableHead>
                 <TableHead className="text-xs w-10"></TableHead>
