@@ -263,16 +263,8 @@ export default function DataCenterPage() {
             // Open preview dialog instead of silent import
             setTxPreview({ rawRows, headers, fileName: f.name, fileId, detectedColumns });
             continue;
-          }
-              };
-            }).filter(tx => tx.date || tx.description || tx.amount !== 0);
 
-            addTransactions(projectId, txs);
-            updateFileStatus(projectId, fileId, 'processed', txs.length);
-            toast.success(`${txs.length} transactions imported from "${f.name}"`, { duration: 5000 });
-            navigate(`/project/${projectId}/transactions`);
-            continue;
-          }
+
 
           if (preview.structureType === 'report' && preview.headers.length === 0) {
             updateFileStatus(projectId, fileId, 'error');
