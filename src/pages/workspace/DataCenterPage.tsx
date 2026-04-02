@@ -263,8 +263,7 @@ export default function DataCenterPage() {
             // Open preview dialog instead of silent import
             setTxPreview({ rawRows, headers, fileName: f.name, fileId, detectedColumns });
             continue;
-
-
+          }
 
           if (preview.structureType === 'report' && preview.headers.length === 0) {
             updateFileStatus(projectId, fileId, 'error');
