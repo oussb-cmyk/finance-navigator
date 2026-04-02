@@ -9,6 +9,7 @@ import {
   FileOutput,
   Download,
   ChevronLeft,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useProjectStore } from '@/store/useProjectStore';
@@ -30,6 +31,7 @@ import { useNavigate } from 'react-router-dom';
 const navItems = [
   { title: 'Overview', url: 'overview', icon: LayoutDashboard },
   { title: 'Data Center', url: 'data-center', icon: Database },
+  { title: 'Transactions', url: 'transactions', icon: ArrowRightLeft },
   { title: 'Journal Classification', url: 'journal-classification', icon: Tags },
   { title: 'Mapping', url: 'mapping', icon: GitBranch },
   { title: 'Journal Entries', url: 'journal-entries', icon: BookOpen },

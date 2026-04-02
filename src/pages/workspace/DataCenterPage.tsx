@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { Upload, FileText, FileSpreadsheet, File, Trash2, RefreshCw, Loader2, AlertTriangle, Download, ShieldCheck, Sparkles, CheckCircle2, XCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useProjectStore } from '@/store/useProjectStore';
@@ -24,6 +24,9 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import type { UploadedFile } from '@/types/finance';
 import { useImportMetaStore } from '@/store/useImportMetaStore';
+import { useTransactionStore } from '@/store/useTransactionStore';
+import { detectTransactionColumns, autoCategorize } from '@/lib/transactionCategorization';
+import type { Transaction } from '@/types/transaction';
 
 interface PendingFile {
   fileId: string;
@@ -33,6 +36,7 @@ interface PendingFile {
 
 export default function DataCenterPage() {
   const { projectId } = useParams();
+  const navigate = useNavigate();
   const pid = projectId || '';
   const files = useProjectFiles(pid);
   const addFile = useProjectStore((s) => s.addFile);
@@ -46,6 +50,7 @@ export default function DataCenterPage() {
   const saveFileFingerprint = useLearningStore((s) => s.saveFileFingerprint);
   const getAccountConfidenceBoost = useLearningStore((s) => s.getAccountConfidenceBoost);
   const addImportMeta = useImportMetaStore((s) => s.addImport);
+  const addTransactions = useTransactionStore((s) => s.addTransactions);
 
   const [dragOver, setDragOver] = useState(false);
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
@@ -226,6 +231,53 @@ export default function DataCenterPage() {
         try {
           const preview = await previewFile(f);
 
+          // ── Transaction file detection ──────────────────────
+          if (preview.headers.length > 0 && detectTransactionColumns(preview.headers)) {
+            updateFileStatus(projectId, fileId, 'processing');
+            // Parse rows as transactions
+            const buffer = await f.arrayBuffer();
+            const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+            const sheet = workbook.Sheets[workbook.SheetNames[0]];
+            const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
+            const headers = Object.keys(rawRows[0] || {});
+
+            // Map columns heuristically
+            const findCol = (pats: RegExp[]) => headers.find(h => pats.some(p => p.test(h))) || '';
+            const dateCol = findCol([/date/i]);
+            const descCol = findCol([/description|libell[eé]|label|memo/i]);
+            const amountCol = findCol([/amount|montant|total/i]);
+            const sourceCol = findCol([/account|compte|source/i]);
+            const entityCol = findCol([/entity|entit[eé]/i]);
+            const tvaCol = findCol([/tva|vat/i]);
+
+            const learnedPatterns = useTransactionStore.getState().getLearnedPatterns(projectId);
+            const txs: Transaction[] = rawRows.map((row, idx) => {
+              const desc = String(row[descCol] || '');
+              const amt = parseFloat(String(row[amountCol] || '0').replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
+              const suggestion = autoCategorize(desc, amt, learnedPatterns);
+              return {
+                id: `tx-${Date.now()}-${idx}`,
+                date: String(row[dateCol] || ''),
+                description: desc,
+                amount: amt,
+                sourceAccount: String(row[sourceCol] || ''),
+                poste: suggestion.confidence >= 60 ? suggestion.poste : '',
+                categorieTreso: suggestion.confidence >= 60 ? suggestion.categorieTreso : '',
+                categoriePnL: suggestion.confidence >= 60 ? suggestion.categoriePnL : '',
+                tva: parseFloat(String(row[tvaCol] || '0')) || 0,
+                entity: String(row[entityCol] || ''),
+                source: f.name,
+                isMapped: suggestion.confidence >= 60,
+              };
+            }).filter(tx => tx.date || tx.description || tx.amount !== 0);
+
+            addTransactions(projectId, txs);
+            updateFileStatus(projectId, fileId, 'processed', txs.length);
+            toast.success(`${txs.length} transactions imported from "${f.name}"`, { duration: 5000 });
+            navigate(`/project/${projectId}/transactions`);
+            continue;
+          }
+
           if (preview.structureType === 'report' && preview.headers.length === 0) {
             updateFileStatus(projectId, fileId, 'error');
             setPendingFile({ fileId, rawFile: f, preview });
@@ -265,7 +317,7 @@ export default function DataCenterPage() {
         }
       }
     }
-  }, [projectId, addFile, updateFileStatus, saveFileFingerprint]);
+  }, [projectId, addFile, updateFileStatus, saveFileFingerprint, addTransactions, navigate]);
 
   /** Open import preview for AI-parsed rows */
   const openImportPreview = (
