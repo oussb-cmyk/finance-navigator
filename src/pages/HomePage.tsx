@@ -12,7 +12,7 @@ export default function HomePage() {
   const { projects, addProject, deleteProject } = useProjectStore();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: '', company: '', currency: 'USD' });
+  const [form, setForm] = useState({ name: '', company: '', activity: '', currency: 'USD' });
 
   const handleCreate = () => {
     if (!form.name || !form.company) return;
