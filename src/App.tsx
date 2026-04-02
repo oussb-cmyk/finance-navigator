@@ -31,6 +31,7 @@ const App = () => (
             <Route index element={<Navigate to="overview" replace />} />
             <Route path="overview" element={<OverviewPage />} />
             <Route path="data-center" element={<DataCenterPage />} />
+            <Route path="transactions" element={<TransactionEnrichmentPage />} />
             <Route path="mapping" element={<MappingPage />} />
             <Route path="journal-classification" element={<JournalClassificationPage />} />
             <Route path="journal-entries" element={<JournalEntriesPage />} />
