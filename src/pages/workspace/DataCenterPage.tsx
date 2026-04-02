@@ -317,7 +317,7 @@ export default function DataCenterPage() {
         }
       }
     }
-  }, [projectId, addFile, updateFileStatus, saveFileFingerprint]);
+  }, [projectId, addFile, updateFileStatus, saveFileFingerprint, addTransactions, navigate]);
 
   /** Open import preview for AI-parsed rows */
   const openImportPreview = (
