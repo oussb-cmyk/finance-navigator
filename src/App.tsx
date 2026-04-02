@@ -15,6 +15,7 @@ import StatementsPage from "./pages/workspace/StatementsPage";
 import DashboardPage from "./pages/workspace/DashboardPage";
 import ReportsPage from "./pages/workspace/ReportsPage";
 import ExportPage from "./pages/workspace/ExportPage";
+import TransactionEnrichmentPage from "./pages/workspace/TransactionEnrichmentPage";
 
 const queryClient = new QueryClient();
 
