@@ -484,40 +484,49 @@ export default function DataCenterPage() {
 
   const [importMenuOpen, setImportMenuOpen] = useState(false);
 
-  const handleImportGL = () => {
+  // Mode selection only — no file picker
+  const handleSelectGL = () => {
     setImportMenuOpen(false);
     setImportMode('gl');
+  };
+
+  const handleSelectTransactions = () => {
+    setImportMenuOpen(false);
+    setImportMode('tx');
+  };
+
+  const handleSelectAutoDetect = () => {
+    setImportMenuOpen(false);
+    // Auto-detect opens file picker immediately since it needs the file to determine mode
+    const input = document.createElement('input');
+    input.type = 'file'; input.multiple = true; input.accept = '.xlsx,.xls,.csv';
+    input.onchange = (e) => { const f = (e.target as HTMLInputElement).files; if (f) handleFiles(f); };
+    input.click();
+  };
+
+  // Explicit upload triggers — only called when user clicks "Upload" button
+  const triggerGLUpload = () => {
     const input = document.createElement('input');
     input.type = 'file'; input.multiple = true; input.accept = '.xlsx,.xls,.csv';
     input.onchange = (e) => { const f = (e.target as HTMLInputElement).files; if (f) handleTemplateUpload(f); };
     input.click();
   };
 
-  const handleImportTransactions = () => {
-    setImportMenuOpen(false);
-    setImportMode('tx');
+  const triggerTxUpload = () => {
     const input = document.createElement('input');
     input.type = 'file'; input.multiple = true; input.accept = '.xlsx,.xls,.csv';
     input.onchange = (e) => { const f = (e.target as HTMLInputElement).files; if (f) handleFiles(f); };
     input.click();
   };
 
-  const handleImportAutoDetect = () => {
-    setImportMenuOpen(false);
-    const input = document.createElement('input');
-    input.type = 'file'; input.multiple = true; input.accept = '.xlsx,.xls,.csv';
-    input.onchange = (e) => { const f = (e.target as HTMLInputElement).files; if (f) handleFiles(f); };
-    input.click();
-  };
-
-  // Handle sidebar import triggers via query param
+  // Handle sidebar import triggers via query param — only set mode
   useEffect(() => {
     const importFlow = searchParams.get('import');
     if (!importFlow) return;
     setSearchParams({}, { replace: true });
-    if (importFlow === 'gl') { setImportMode('gl'); handleImportGL(); }
-    else if (importFlow === 'tx') { setImportMode('tx'); handleImportTransactions(); }
-    else if (importFlow === 'auto') handleImportAutoDetect();
+    if (importFlow === 'gl') setImportMode('gl');
+    else if (importFlow === 'tx') setImportMode('tx');
+    else if (importFlow === 'auto') handleSelectAutoDetect();
   }, [searchParams]);
 
   // Filter files by mode
