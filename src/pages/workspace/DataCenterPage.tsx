@@ -21,6 +21,7 @@ import { ImportPreviewDialog } from '@/components/workspace/ImportPreviewDialog'
 import { TransactionPreviewDialog } from '@/components/workspace/TransactionPreviewDialog';
 import type { ImportRow } from '@/lib/dataQuality';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import type { UploadedFile } from '@/types/finance';
@@ -512,79 +513,74 @@ export default function DataCenterPage() {
           <h1 className="page-title">Data Center</h1>
           <p className="page-subtitle">Import, manage, and prepare your financial data</p>
         </div>
-        <div className="relative">
-          <Button size="lg" onClick={() => setImportMenuOpen(prev => !prev)} className="gap-2">
-            <Plus className="h-4 w-4" />
-            Import Data
-          </Button>
-
-          {/* ─── Contextual Import Dropdown ──────────────────────── */}
-          {importMenuOpen && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setImportMenuOpen(false)} />
-              <div className="absolute right-0 top-full mt-2 z-50 w-[380px] rounded-xl border border-border bg-card shadow-lg animate-fade-in origin-top-right">
-                <div className="px-4 pt-4 pb-2">
-                  <p className="text-sm font-semibold text-foreground">Import your data</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Choose the format that matches your file</p>
+        <Popover open={importMenuOpen} onOpenChange={setImportMenuOpen}>
+          <PopoverTrigger asChild>
+            <Button size="lg" className="gap-2">
+              <Plus className="h-4 w-4" />
+              Import Data
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="end" sideOffset={8} className="w-[380px] rounded-xl p-0 border-border shadow-lg">
+            <div className="px-4 pt-4 pb-2">
+              <p className="text-sm font-semibold text-foreground">Import your data</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Choose the format that matches your file</p>
+            </div>
+            <div className="px-2 pb-2 space-y-0.5">
+              {/* GL Option */}
+              <button
+                onClick={handleImportGL}
+                className="w-full flex items-start gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-accent/50 group"
+              >
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 group-hover:bg-primary/15 transition-colors">
+                  <BookOpen className="h-4 w-4 text-primary" />
                 </div>
-                <div className="px-2 pb-2 space-y-0.5">
-                  {/* GL Option */}
-                  <button
-                    onClick={handleImportGL}
-                    className="w-full flex items-start gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-accent/50 group"
-                  >
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 group-hover:bg-primary/15 transition-colors">
-                      <BookOpen className="h-4 w-4 text-primary" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-medium text-foreground">General Ledger (GL)</span>
-                        <span className="text-[9px] font-semibold uppercase tracking-wider text-primary bg-primary/10 px-1.5 py-0.5 rounded-full leading-none">Recommended</span>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                        Structured accounting data with debit/credit — Sage, Pennylane exports
-                      </p>
-                    </div>
-                  </button>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-foreground">General Ledger (GL)</span>
+                    <span className="text-[9px] font-semibold uppercase tracking-wider text-primary bg-primary/10 px-1.5 py-0.5 rounded-full leading-none">Recommended</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                    Structured accounting data with debit/credit — Sage, Pennylane exports
+                  </p>
+                </div>
+              </button>
 
-                  {/* Transactions Option */}
-                  <button
-                    onClick={handleImportTransactions}
-                    className="w-full flex items-start gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-accent/50 group"
-                  >
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-info/10 group-hover:bg-info/15 transition-colors">
-                      <CreditCard className="h-4 w-4 text-info" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm font-medium text-foreground">Transactions</span>
-                      <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                        Bank or operational data (CSV, Qonto, Excel) — auto-categorize into Poste, P&L, Treasury
-                      </p>
-                    </div>
-                  </button>
+              {/* Transactions Option */}
+              <button
+                onClick={handleImportTransactions}
+                className="w-full flex items-start gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-accent/50 group"
+              >
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-info/10 group-hover:bg-info/15 transition-colors">
+                  <CreditCard className="h-4 w-4 text-info" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-medium text-foreground">Transactions</span>
+                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                    Bank or operational data (CSV, Qonto, Excel) — auto-categorize into Poste, P&L, Treasury
+                  </p>
+                </div>
+              </button>
 
-                  <div className="border-t border-border mx-1 my-1" />
+              <div className="border-t border-border mx-1 my-1" />
 
-                  {/* Auto-detect Option */}
-                  <button
-                    onClick={handleImportAutoDetect}
-                    className="w-full flex items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-accent/50 group"
-                  >
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted group-hover:bg-muted/80 transition-colors">
-                      <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm font-medium text-foreground">Not sure? Auto-detect</span>
-                      <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                        Upload your file and we'll determine the format automatically
-                      </p>
+              {/* Auto-detect Option */}
+              <button
+                onClick={handleImportAutoDetect}
+                className="w-full flex items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-accent/50 group"
+              >
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted group-hover:bg-muted/80 transition-colors">
+                  <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <span className="text-sm font-medium text-foreground">Not sure? Auto-detect</span>
+                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                    Upload your file and we'll determine the format automatically
+                  </p>
                     </div>
                   </button>
                 </div>
-              </div>
-            </>
-          )}
-        </div>
+              </PopoverContent>
+            </Popover>
       </div>
 
       {/* ─── Empty State / Quick Actions ─────────────────────────── */}
