@@ -2,6 +2,7 @@ export interface Project {
   id: string;
   name: string;
   company: string;
+  activity: string;
   currency: string;
   fiscalYearEnd: string;
   createdAt: string;

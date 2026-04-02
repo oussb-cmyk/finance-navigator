@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { CheckCircle2, AlertTriangle, Filter, Search, Edit3, Trash2, ArrowUpDown } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Filter, Search, Edit3, Trash2, ArrowUpDown, Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -10,9 +10,11 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { Table, TableHeader, TableHead, TableBody, TableRow, TableCell } from '@/components/ui/table';
 import { toast } from 'sonner';
 import { useTransactionStore } from '@/store/useTransactionStore';
+import { useProjectStore } from '@/store/useProjectStore';
 import { POSTES, CATEGORIES_TRESO, CATEGORIES_PNL } from '@/types/transaction';
 import type { Transaction } from '@/types/transaction';
 import { autoCategorize } from '@/lib/transactionCategorization';
+import { supabase } from '@/integrations/supabase/client';
 
 function ComboSelect({ value, options, onChange, placeholder }: {
   value: string; options: readonly string[]; onChange: (v: string) => void; placeholder?: string;
@@ -58,6 +60,9 @@ export default function TransactionEnrichmentPage() {
   const deleteTransactions = useTransactionStore((s) => s.deleteTransactions);
   const learnFromCorrection = useTransactionStore((s) => s.learnFromCorrection);
 
+  const projects = useProjectStore((s) => s.projects);
+  const project = projects.find(p => p.id === pid);
+
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [filterPoste, setFilterPoste] = useState('all');
@@ -65,6 +70,8 @@ export default function TransactionEnrichmentPage() {
   const [filterMapped, setFilterMapped] = useState<'all' | 'mapped' | 'unmapped'>('all');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Transaction>>({});
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiUpdatedIds, setAiUpdatedIds] = useState<Set<string>>(new Set());
 
   // Stats
   const mappedCount = useMemo(() => transactions.filter(t => t.isMapped && t.poste).length, [transactions]);
@@ -140,24 +147,73 @@ export default function TransactionEnrichmentPage() {
     setSelected(new Set());
   };
 
-  const handleAutoCategorizeAll = () => {
-    const learned = useTransactionStore.getState().getLearnedPatterns(pid);
-    let count = 0;
-    for (const tx of transactions) {
-      if (!tx.poste || tx.poste === 'Autres charges') {
-        const suggestion = autoCategorize(tx.description, tx.amount, learned);
-        if (suggestion.confidence >= 60) {
-          updateTransaction(pid, tx.id, {
-            poste: suggestion.poste,
-            categorieTreso: suggestion.categorieTreso,
-            categoriePnL: suggestion.categoriePnL,
-            isMapped: true,
-          });
-          count++;
+  const handleAutoCategorizeAll = async () => {
+    const activity = project?.activity || 'General';
+    const uncategorized = transactions.filter(t => !t.poste || t.poste === 'Autres charges');
+    
+    if (uncategorized.length === 0) {
+      toast.info('All transactions are already categorized');
+      return;
+    }
+
+    setAiLoading(true);
+    const BATCH_SIZE = 30;
+    let totalUpdated = 0;
+    const newAiIds = new Set<string>();
+
+    try {
+      for (let i = 0; i < uncategorized.length; i += BATCH_SIZE) {
+        const batch = uncategorized.slice(i, i + BATCH_SIZE);
+        const payload = batch.map(tx => ({
+          id: tx.id,
+          description: tx.description,
+          amount: tx.amount,
+          sourceAccount: tx.sourceAccount || undefined,
+        }));
+
+        const { data, error } = await supabase.functions.invoke('categorize-transactions', {
+          body: { transactions: payload, activity },
+        });
+
+        if (error) {
+          console.error('AI categorization error:', error);
+          toast.error(`AI error: ${error.message || 'Failed to categorize'}`);
+          break;
+        }
+
+        const results = data?.results as Array<{
+          poste: string;
+          categorie_treso: string;
+          categorie_pnl: string;
+        }> | undefined;
+
+        if (results && results.length === batch.length) {
+          for (let j = 0; j < batch.length; j++) {
+            const r = results[j];
+            if (r?.poste) {
+              updateTransaction(pid, batch[j].id, {
+                poste: r.poste,
+                categorieTreso: r.categorie_treso,
+                categoriePnL: r.categorie_pnl,
+                isMapped: true,
+              });
+              newAiIds.add(batch[j].id);
+              totalUpdated++;
+            }
+          }
         }
       }
+
+      setAiUpdatedIds(newAiIds);
+      // Clear highlight after 5 seconds
+      setTimeout(() => setAiUpdatedIds(new Set()), 5000);
+      toast.success(`AI categorized ${totalUpdated} transaction${totalUpdated !== 1 ? 's' : ''} (${activity} context)`);
+    } catch (err) {
+      console.error('AI categorization failed:', err);
+      toast.error('AI categorization failed. Existing values preserved.');
+    } finally {
+      setAiLoading(false);
     }
-    toast.success(`Auto-categorized ${count} transactions`);
   };
 
   if (transactions.length === 0) {
@@ -206,8 +262,12 @@ export default function TransactionEnrichmentPage() {
         <div className="flex items-center gap-2 bg-warning/10 border border-warning/30 rounded-lg px-3 py-2 mb-4 text-sm">
           <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
           <span className="text-foreground">{unmappedCount} transaction{unmappedCount > 1 ? 's' : ''} need categorization before generating reports.</span>
-          <Button size="sm" variant="outline" className="ml-auto" onClick={handleAutoCategorizeAll}>
-            Auto-categorize
+          <Button size="sm" variant="outline" className="ml-auto gap-2" onClick={handleAutoCategorizeAll} disabled={aiLoading}>
+            {aiLoading ? (
+              <><Loader2 className="h-3.5 w-3.5 animate-spin" />AI is categorizing...</>
+            ) : (
+              <><Sparkles className="h-3.5 w-3.5" />Auto-categorize with AI</>
+            )}
           </Button>
         </div>
       )}
@@ -284,10 +344,11 @@ export default function TransactionEnrichmentPage() {
               {filtered.map((tx) => {
                 const isEditing = editingId === tx.id;
                 const isMissing = !tx.poste || tx.poste === 'Autres charges';
+                const isAiUpdated = aiUpdatedIds.has(tx.id);
                 return (
                   <TableRow
                     key={tx.id}
-                    className={isMissing ? 'bg-warning/5' : ''}
+                    className={`${isMissing ? 'bg-warning/5' : ''} ${isAiUpdated ? 'bg-primary/10 animate-pulse' : ''} transition-colors`}
                   >
                     <TableCell>
                       <Checkbox checked={selected.has(tx.id)} onCheckedChange={() => toggleSelect(tx.id)} />

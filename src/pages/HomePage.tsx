@@ -12,15 +12,16 @@ export default function HomePage() {
   const { projects, addProject, deleteProject } = useProjectStore();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: '', company: '', currency: 'USD' });
+  const [form, setForm] = useState({ name: '', company: '', activity: '', currency: 'USD' });
 
   const handleCreate = () => {
-    if (!form.name || !form.company) return;
+    if (!form.name || !form.company || !form.activity) return;
     const id = `proj-${Date.now()}`;
     addProject({
       id,
       name: form.name,
       company: form.company,
+      activity: form.activity,
       currency: form.currency,
       fiscalYearEnd: new Date().toISOString().slice(0, 10),
       createdAt: new Date().toISOString().slice(0, 10),
@@ -30,7 +31,7 @@ export default function HomePage() {
       entriesCount: 0,
       unmappedAccounts: 0,
     });
-    setForm({ name: '', company: '', currency: 'USD' });
+    setForm({ name: '', company: '', activity: '', currency: 'USD' });
     setOpen(false);
     navigate(`/project/${id}/overview`);
   };
@@ -66,10 +67,15 @@ export default function HomePage() {
                   <Input placeholder="e.g. Acme Corp" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} />
                 </div>
                 <div>
+                  <Label>Business Activity <span className="text-destructive">*</span></Label>
+                  <Input placeholder="e.g. Restaurant, SaaS, Real Estate, E-commerce, Consulting" value={form.activity} onChange={(e) => setForm({ ...form, activity: e.target.value })} />
+                  <p className="text-xs text-muted-foreground mt-1">Used for AI-powered transaction categorization</p>
+                </div>
+                <div>
                   <Label>Currency</Label>
                   <Input placeholder="USD" value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} />
                 </div>
-                <Button onClick={handleCreate} className="w-full">Create Project</Button>
+                <Button onClick={handleCreate} className="w-full" disabled={!form.name || !form.company || !form.activity}>Create Project</Button>
               </div>
             </DialogContent>
           </Dialog>
