@@ -21,6 +21,7 @@ import { ImportPreviewDialog } from '@/components/workspace/ImportPreviewDialog'
 import { TransactionPreviewDialog } from '@/components/workspace/TransactionPreviewDialog';
 import type { ImportRow } from '@/lib/dataQuality';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import type { UploadedFile } from '@/types/finance';
