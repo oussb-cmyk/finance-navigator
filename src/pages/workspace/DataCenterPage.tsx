@@ -18,6 +18,7 @@ import { ColumnMappingDialog } from '@/components/workspace/ColumnMappingDialog'
 import { HierarchicalPreviewDialog } from '@/components/workspace/HierarchicalPreviewDialog';
 import { ReviewValidationDialog } from '@/components/workspace/ReviewValidationDialog';
 import { ImportPreviewDialog } from '@/components/workspace/ImportPreviewDialog';
+import { TransactionPreviewDialog } from '@/components/workspace/TransactionPreviewDialog';
 import type { ImportRow } from '@/lib/dataQuality';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
