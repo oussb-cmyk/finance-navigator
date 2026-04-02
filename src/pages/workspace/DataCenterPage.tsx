@@ -18,6 +18,7 @@ import { ColumnMappingDialog } from '@/components/workspace/ColumnMappingDialog'
 import { HierarchicalPreviewDialog } from '@/components/workspace/HierarchicalPreviewDialog';
 import { ReviewValidationDialog } from '@/components/workspace/ReviewValidationDialog';
 import { ImportPreviewDialog } from '@/components/workspace/ImportPreviewDialog';
+import { TransactionPreviewDialog } from '@/components/workspace/TransactionPreviewDialog';
 import type { ImportRow } from '@/lib/dataQuality';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -66,6 +67,15 @@ export default function DataCenterPage() {
 
   // Import Preview dialog state (mandatory preview step)
   const [previewData, setPreviewData] = useState<{ rows: ImportRow[]; fileName: string; fileId: string; mode: 'template' | 'ai' } | null>(null);
+
+  // Transaction preview dialog state
+  const [txPreview, setTxPreview] = useState<{
+    rawRows: Record<string, unknown>[];
+    headers: string[];
+    fileName: string;
+    fileId: string;
+    detectedColumns: { dateCol: string; descCol: string; amountCol: string; sourceCol: string; entityCol: string; tvaCol: string };
+  } | null>(null);
 
   // Template validation error state
   const [templateErrors, setTemplateErrors] = useState<TemplateRowError[]>([]);
@@ -234,47 +244,24 @@ export default function DataCenterPage() {
           // ── Transaction file detection ──────────────────────
           if (preview.headers.length > 0 && detectTransactionColumns(preview.headers)) {
             updateFileStatus(projectId, fileId, 'processing');
-            // Parse rows as transactions
             const buffer = await f.arrayBuffer();
             const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
             const sheet = workbook.Sheets[workbook.SheetNames[0]];
             const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
             const headers = Object.keys(rawRows[0] || {});
 
-            // Map columns heuristically
             const findCol = (pats: RegExp[]) => headers.find(h => pats.some(p => p.test(h))) || '';
-            const dateCol = findCol([/date/i]);
-            const descCol = findCol([/description|libell[eé]|label|memo/i]);
-            const amountCol = findCol([/amount|montant|total/i]);
-            const sourceCol = findCol([/account|compte|source/i]);
-            const entityCol = findCol([/entity|entit[eé]/i]);
-            const tvaCol = findCol([/tva|vat/i]);
+            const detectedColumns = {
+              dateCol: findCol([/date/i]),
+              descCol: findCol([/description|libell[eé]|label|memo/i]),
+              amountCol: findCol([/amount|montant|total/i]),
+              sourceCol: findCol([/account|compte|source/i]),
+              entityCol: findCol([/entity|entit[eé]/i]),
+              tvaCol: findCol([/tva|vat/i]),
+            };
 
-            const learnedPatterns = useTransactionStore.getState().getLearnedPatterns(projectId);
-            const txs: Transaction[] = rawRows.map((row, idx) => {
-              const desc = String(row[descCol] || '');
-              const amt = parseFloat(String(row[amountCol] || '0').replace(/[^\d.,-]/g, '').replace(',', '.')) || 0;
-              const suggestion = autoCategorize(desc, amt, learnedPatterns);
-              return {
-                id: `tx-${Date.now()}-${idx}`,
-                date: String(row[dateCol] || ''),
-                description: desc,
-                amount: amt,
-                sourceAccount: String(row[sourceCol] || ''),
-                poste: suggestion.confidence >= 60 ? suggestion.poste : '',
-                categorieTreso: suggestion.confidence >= 60 ? suggestion.categorieTreso : '',
-                categoriePnL: suggestion.confidence >= 60 ? suggestion.categoriePnL : '',
-                tva: parseFloat(String(row[tvaCol] || '0')) || 0,
-                entity: String(row[entityCol] || ''),
-                source: f.name,
-                isMapped: suggestion.confidence >= 60,
-              };
-            }).filter(tx => tx.date || tx.description || tx.amount !== 0);
-
-            addTransactions(projectId, txs);
-            updateFileStatus(projectId, fileId, 'processed', txs.length);
-            toast.success(`${txs.length} transactions imported from "${f.name}"`, { duration: 5000 });
-            navigate(`/project/${projectId}/transactions`);
+            // Open preview dialog instead of silent import
+            setTxPreview({ rawRows, headers, fileName: f.name, fileId, detectedColumns });
             continue;
           }
 
@@ -317,7 +304,7 @@ export default function DataCenterPage() {
         }
       }
     }
-  }, [projectId, addFile, updateFileStatus, saveFileFingerprint, addTransactions, navigate]);
+  }, [projectId, addFile, updateFileStatus, saveFileFingerprint]);
 
   /** Open import preview for AI-parsed rows */
   const openImportPreview = (
@@ -433,6 +420,32 @@ export default function DataCenterPage() {
 
   const handleFallbackToMapping = () => { setDialogMode('tabular'); };
   const closePending = () => { setPendingFile(null); setDialogMode(null); };
+
+  // ─── Transaction preview confirm handler ───────────────────────
+  const handleTxPreviewConfirm = useCallback((txs: Transaction[]) => {
+    if (!projectId || !txPreview) return;
+    addTransactions(projectId, txs);
+    updateFileStatus(projectId, txPreview.fileId, 'processed', txs.length);
+    toast.success(`${txs.length} transactions imported from "${txPreview.fileName}"`, { duration: 5000 });
+    setTxPreview(null);
+    navigate(`/project/${projectId}/transactions`);
+  }, [projectId, txPreview, addTransactions, updateFileStatus, navigate]);
+
+  // ─── Transaction template download ────────────────────────────
+  const downloadTransactionTemplate = useCallback(() => {
+    const wb = XLSX.utils.book_new();
+    const data = [
+      ['Date', 'Description', 'Amount', 'Source Account', 'Entity', 'TVA'],
+      ['2024-01-15', 'URSSAF - Cotisations', '-3500', 'Banque Principale', 'Société A', '0'],
+      ['2024-01-20', 'Facture client #1234', '12000', 'Banque Principale', 'Société A', '20'],
+      ['2024-02-01', 'Loyer bureaux', '-2500', 'Banque Principale', 'Société A', '20'],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    ws['!cols'] = [{ wch: 14 }, { wch: 30 }, { wch: 12 }, { wch: 20 }, { wch: 15 }, { wch: 6 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Transactions');
+    XLSX.writeFile(wb, 'transaction_template.xlsx');
+    toast.success('Transaction template downloaded');
+  }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault(); setDragOver(false);
@@ -576,6 +589,9 @@ export default function DataCenterPage() {
                   <span>•</span>
                   <span>Single amount</span>
                 </div>
+                <p className="mt-1.5 text-[11px] text-muted-foreground/70 italic">
+                  Use our template for best results — or upload any CSV/Excel file.
+                </p>
               </div>
             </button>
 
@@ -611,10 +627,14 @@ export default function DataCenterPage() {
           <p className="text-sm text-muted-foreground mb-4">
             Drag & drop files here, or click "Import Data" to get started
           </p>
-          <div className="flex items-center justify-center gap-3">
+          <div className="flex items-center justify-center gap-3 flex-wrap">
             <Button variant="outline" size="sm" onClick={downloadTemplate}>
               <Download className="h-3.5 w-3.5 mr-1" />
               Download GL Template
+            </Button>
+            <Button variant="outline" size="sm" onClick={downloadTransactionTemplate}>
+              <Download className="h-3.5 w-3.5 mr-1" />
+              Download Transaction Template
             </Button>
             <Button size="sm" onClick={() => setImportModalOpen(true)}>
               <Plus className="h-3.5 w-3.5 mr-1" />
@@ -777,7 +797,20 @@ export default function DataCenterPage() {
         />
       )}
 
-      {/* Template validation errors dialog */}
+      {/* ★ Transaction Preview Dialog */}
+      {txPreview && (
+        <TransactionPreviewDialog
+          open
+          onOpenChange={(open) => { if (!open) setTxPreview(null); }}
+          rawRows={txPreview.rawRows}
+          headers={txPreview.headers}
+          fileName={txPreview.fileName}
+          detectedColumns={txPreview.detectedColumns}
+          learnedPatterns={useTransactionStore.getState().getLearnedPatterns(pid)}
+          onConfirm={handleTxPreviewConfirm}
+        />
+      )}
+
       {templateErrorDialogOpen && templateErrors.length > 0 && (
         <Dialog open onOpenChange={(open) => { if (!open) { setTemplateErrorDialogOpen(false); setTemplateErrors([]); setTemplateValidationResult(null); } }}>
           <DialogContent className="sm:max-w-lg max-h-[80vh]">
