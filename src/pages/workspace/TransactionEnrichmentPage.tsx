@@ -147,24 +147,73 @@ export default function TransactionEnrichmentPage() {
     setSelected(new Set());
   };
 
-  const handleAutoCategorizeAll = () => {
-    const learned = useTransactionStore.getState().getLearnedPatterns(pid);
-    let count = 0;
-    for (const tx of transactions) {
-      if (!tx.poste || tx.poste === 'Autres charges') {
-        const suggestion = autoCategorize(tx.description, tx.amount, learned);
-        if (suggestion.confidence >= 60) {
-          updateTransaction(pid, tx.id, {
-            poste: suggestion.poste,
-            categorieTreso: suggestion.categorieTreso,
-            categoriePnL: suggestion.categoriePnL,
-            isMapped: true,
-          });
-          count++;
+  const handleAutoCategorizeAll = async () => {
+    const activity = project?.activity || 'General';
+    const uncategorized = transactions.filter(t => !t.poste || t.poste === 'Autres charges');
+    
+    if (uncategorized.length === 0) {
+      toast.info('All transactions are already categorized');
+      return;
+    }
+
+    setAiLoading(true);
+    const BATCH_SIZE = 30;
+    let totalUpdated = 0;
+    const newAiIds = new Set<string>();
+
+    try {
+      for (let i = 0; i < uncategorized.length; i += BATCH_SIZE) {
+        const batch = uncategorized.slice(i, i + BATCH_SIZE);
+        const payload = batch.map(tx => ({
+          id: tx.id,
+          description: tx.description,
+          amount: tx.amount,
+          sourceAccount: tx.sourceAccount || undefined,
+        }));
+
+        const { data, error } = await supabase.functions.invoke('categorize-transactions', {
+          body: { transactions: payload, activity },
+        });
+
+        if (error) {
+          console.error('AI categorization error:', error);
+          toast.error(`AI error: ${error.message || 'Failed to categorize'}`);
+          break;
+        }
+
+        const results = data?.results as Array<{
+          poste: string;
+          categorie_treso: string;
+          categorie_pnl: string;
+        }> | undefined;
+
+        if (results && results.length === batch.length) {
+          for (let j = 0; j < batch.length; j++) {
+            const r = results[j];
+            if (r?.poste) {
+              updateTransaction(pid, batch[j].id, {
+                poste: r.poste,
+                categorieTreso: r.categorie_treso,
+                categoriePnL: r.categorie_pnl,
+                isMapped: true,
+              });
+              newAiIds.add(batch[j].id);
+              totalUpdated++;
+            }
+          }
         }
       }
+
+      setAiUpdatedIds(newAiIds);
+      // Clear highlight after 5 seconds
+      setTimeout(() => setAiUpdatedIds(new Set()), 5000);
+      toast.success(`AI categorized ${totalUpdated} transaction${totalUpdated !== 1 ? 's' : ''} (${activity} context)`);
+    } catch (err) {
+      console.error('AI categorization failed:', err);
+      toast.error('AI categorization failed. Existing values preserved.');
+    } finally {
+      setAiLoading(false);
     }
-    toast.success(`Auto-categorized ${count} transactions`);
   };
 
   if (transactions.length === 0) {
