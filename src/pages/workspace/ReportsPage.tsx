@@ -5,6 +5,7 @@ import { useImportMetaStore } from '@/store/useImportMetaStore';
 import { useProjectFiles, useProjectEntries, useProjectMappings } from '@/hooks/useStableStoreSelectors';
 import { FileText, CheckCircle, AlertTriangle, Clock, ShieldCheck } from 'lucide-react';
 
+const EMPTY_IMPORT_METAS: any[] = [];
 export default function ReportsPage() {
   const { projectId } = useParams();
   const pid = projectId || '';
