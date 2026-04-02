@@ -72,6 +72,8 @@ export default function TransactionEnrichmentPage() {
   const [editForm, setEditForm] = useState<Partial<Transaction>>({});
   const [aiLoading, setAiLoading] = useState(false);
   const [aiUpdatedIds, setAiUpdatedIds] = useState<Set<string>>(new Set());
+  const [aiConfidence, setAiConfidence] = useState<Record<string, { confidence: number; needs_review: boolean }>>({});
+  const [filterReview, setFilterReview] = useState(false);
 
   // Stats
   const mappedCount = useMemo(() => transactions.filter(t => t.isMapped && t.poste).length, [transactions]);
@@ -94,8 +96,9 @@ export default function TransactionEnrichmentPage() {
     if (filterCategory !== 'all') result = result.filter(t => t.categorieTreso === filterCategory);
     if (filterMapped === 'mapped') result = result.filter(t => t.isMapped);
     if (filterMapped === 'unmapped') result = result.filter(t => !t.isMapped || !t.poste);
+    if (filterReview) result = result.filter(t => aiConfidence[t.id]?.needs_review);
     return result;
-  }, [transactions, searchQuery, filterPoste, filterCategory, filterMapped]);
+  }, [transactions, searchQuery, filterPoste, filterCategory, filterMapped, filterReview, aiConfidence]);
 
   const toggleSelect = (id: string) => {
     setSelected(prev => {
@@ -185,9 +188,12 @@ export default function TransactionEnrichmentPage() {
           poste: string;
           categorie_treso: string;
           categorie_pnl: string;
+          confidence?: number;
+          needs_review?: boolean;
         }> | undefined;
 
         if (results && results.length === batch.length) {
+          const newConfMap: Record<string, { confidence: number; needs_review: boolean }> = {};
           for (let j = 0; j < batch.length; j++) {
             const r = results[j];
             if (r?.poste) {
@@ -198,9 +204,14 @@ export default function TransactionEnrichmentPage() {
                 isMapped: true,
               });
               newAiIds.add(batch[j].id);
+              newConfMap[batch[j].id] = {
+                confidence: r.confidence ?? 50,
+                needs_review: r.needs_review ?? false,
+              };
               totalUpdated++;
             }
           }
+          setAiConfidence(prev => ({ ...prev, ...newConfMap }));
         }
       }
 
@@ -300,6 +311,16 @@ export default function TransactionEnrichmentPage() {
             <SelectItem value="unmapped">Unmapped</SelectItem>
           </SelectContent>
         </Select>
+        <Button
+          size="sm"
+          variant={filterReview ? 'default' : 'outline'}
+          className="h-8 text-xs gap-1"
+          onClick={() => setFilterReview(!filterReview)}
+          disabled={Object.values(aiConfidence).filter(c => c.needs_review).length === 0}
+        >
+          <AlertTriangle className="h-3 w-3" />
+          Needs Review ({Object.values(aiConfidence).filter(c => c.needs_review).length})
+        </Button>
         <span className="text-xs text-muted-foreground">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</span>
       </div>
 
@@ -335,6 +356,7 @@ export default function TransactionEnrichmentPage() {
                 <TableHead className="text-xs min-w-[160px]">Poste</TableHead>
                 <TableHead className="text-xs min-w-[160px]">Cat. Tréso</TableHead>
                 <TableHead className="text-xs min-w-[160px]">Cat. P&L</TableHead>
+                <TableHead className="text-xs w-[80px]">Confidence</TableHead>
                 <TableHead className="text-xs">TVA</TableHead>
                 <TableHead className="text-xs">Entity</TableHead>
                 <TableHead className="text-xs w-10"></TableHead>
@@ -345,10 +367,12 @@ export default function TransactionEnrichmentPage() {
                 const isEditing = editingId === tx.id;
                 const isMissing = !tx.poste || tx.poste === 'Autres charges';
                 const isAiUpdated = aiUpdatedIds.has(tx.id);
+                const conf = aiConfidence[tx.id];
+                const isReview = conf?.needs_review;
                 return (
                   <TableRow
                     key={tx.id}
-                    className={`${isMissing ? 'bg-warning/5' : ''} ${isAiUpdated ? 'bg-primary/10 animate-pulse' : ''} transition-colors`}
+                    className={`${isMissing ? 'bg-warning/5' : ''} ${isAiUpdated ? 'bg-primary/10 animate-pulse' : ''} ${isReview ? 'bg-destructive/5 border-l-2 border-l-destructive/40' : ''} transition-colors`}
                   >
                     <TableCell>
                       <Checkbox checked={selected.has(tx.id)} onCheckedChange={() => toggleSelect(tx.id)} />
@@ -381,6 +405,22 @@ export default function TransactionEnrichmentPage() {
                     </TableCell>
                     <TableCell>
                       <ComboSelect value={tx.categoriePnL} options={CATEGORIES_PNL} onChange={(v) => handleFieldChange(tx.id, 'categoriePnL', v)} placeholder="Cat. P&L" />
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {aiConfidence[tx.id] ? (
+                        <div className="flex items-center gap-1.5">
+                          <div className={`h-2 w-2 rounded-full shrink-0 ${
+                            aiConfidence[tx.id].confidence >= 80 ? 'bg-emerald-500' :
+                            aiConfidence[tx.id].confidence >= 50 ? 'bg-amber-500' : 'bg-red-500'
+                          }`} />
+                          <span className="font-medium">{aiConfidence[tx.id].confidence}%</span>
+                          {aiConfidence[tx.id].needs_review && (
+                            <AlertTriangle className="h-3 w-3 text-warning" />
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-xs mono">
                       {isEditing ? (

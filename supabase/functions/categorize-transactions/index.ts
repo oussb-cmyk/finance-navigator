@@ -36,26 +36,71 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY is not configured");
     }
 
-    // Build a compact list for the prompt
     const txList = transactions.map((tx, i) => 
       `${i}: "${tx.description}" | ${tx.amount} | ${tx.sourceAccount || "N/A"}`
     ).join("\n");
 
-    const systemPrompt = `You are a financial analyst specialized in the following business activity: ${activity}.
+    const systemPrompt = `You are a financial transaction classification engine specialized in: ${activity}.
 
-Categorize each transaction into:
-- Poste (detailed category)
-- Catégorie Tréso (cash flow category)
-- Catégorie P&L (Profit & Loss category)
+Your goal is to classify transactions EVEN when descriptions are unclear, generic, or contain only references (e.g. invoice numbers, codes).
+
+IMPORTANT:
+- Return ONLY valid JSON
+- No explanation
+- No text outside the JSON array
+
+For each transaction, return:
+- poste
+- categorie_treso
+- categorie_pnl
+- confidence (0 to 100)
+- needs_review (true or false)
+
+Core logic:
+
+1. Amount:
+- Negative → expense → "Décaissements d'exploitation"
+- Positive → revenue → "Encaissements d'exploitation"
+
+2. Interpretation (CRITICAL):
+If the description is unclear (e.g. "FACT", invoice number, code):
+You MUST infer using:
+- The business activity: ${activity}
+- Typical business behavior
+- Common accounting patterns
+
+Examples:
+- "FACT", "invoice", unknown supplier → default to "Achats de prestations de services"
+- Random company name → assume supplier → expense
+- Person name → salary or contractor → Masse salariale OR Honoraires
+- Bank / transfer → Compte courant
 
 Context rules:
 - Adapt categorization to the business activity
 - Example: in SaaS, 'Stripe' = revenue
 - Example: in real estate, 'loyer' can be income or expense depending on context
 
-General rules:
-- Negative amounts = expenses (Décaissements)
-- Positive amounts = revenue (Encaissements)
+3. Confidence scoring:
+- Very clear keyword match (facebook, urssaf, loyer, etc.) → confidence: 90–100, needs_review: false
+- Medium clarity (supplier name, partial meaning) → confidence: 60–80, needs_review: false
+- Low clarity (FACT, REF, unknown code, vague text) → confidence: 30–60, needs_review: true
+- Very ambiguous / guess → confidence: ≤40, needs_review: true
+
+4. Default fallback (VERY IMPORTANT):
+If you cannot clearly identify:
+- For negative amount:
+  → poste: "Achats de prestations de services"
+  → categorie_treso: "Décaissements d'exploitation"
+  → categorie_pnl: "Charges d'exploitation"
+- For positive amount:
+  → poste: "Chiffre d'affaires"
+  → categorie_treso: "Encaissements d'exploitation"
+  → categorie_pnl: "Produits d'exploitation"
+
+5. Financial rules:
+- NEVER classify financing as expense
+- Taxes → Impôts et taxes
+- Salaries → Masse salariale
 
 Keyword hints:
 - 'facebook', 'ads', 'google' → Publicité et marketing
@@ -68,14 +113,10 @@ Keyword hints:
 - 'assurance', 'insurance' → Assurances
 - 'logiciel', 'software', 'saas', 'subscription' → Logiciels et abonnements
 
-Valid Postes: Masse salariale, Loyer et charges locatives, Publicité et marketing, Frais bancaires, Honoraires et conseils, Fournitures et consommables, Déplacements et missions, Assurances, Télécommunications, Logiciels et abonnements, Impôts et taxes, Chiffre d'affaires, Subventions, Investissements, Emprunts et financements, Remboursements clients, Frais de personnel divers, Entretien et réparations, Formation, Amortissements, Autres charges, Autres produits
-
-Valid Catégorie Tréso: Encaissement client, Décaissement fournisseur, Salaires et charges sociales, Loyer, Impôts, Frais bancaires, Investissement, Financement, TVA, Remboursement, Divers
-
-Valid Catégorie P&L: Chiffre d'affaires, Achats et charges externes, Charges de personnel, Impôts et taxes, Dotations amortissements, Charges financières, Produits financiers, Charges exceptionnelles, Produits exceptionnels, Autres produits, Autres charges
+You MUST always return a classification. Never skip a transaction.
 
 Return ONLY a valid JSON array with one object per transaction (same order as input):
-[{"poste":"...","categorie_treso":"...","categorie_pnl":"..."}]`;
+[{"poste":"...","categorie_treso":"...","categorie_pnl":"...","confidence":75,"needs_review":false}]`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -113,7 +154,6 @@ Return ONLY a valid JSON array with one object per transaction (same order as in
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content || "";
 
-    // Extract JSON from response (handle markdown code blocks)
     const jsonMatch = content.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
       console.error("Failed to parse AI response:", content);
