@@ -24,19 +24,23 @@ serve(async (req) => {
       activity: string;
     };
 
+    console.log(`Received ${transactions?.length ?? 0} transactions for activity: ${activity}`);
+
     if (!transactions?.length || !activity) {
+      console.error("Missing transactions or activity");
       return new Response(
         JSON.stringify({ error: "Missing transactions or activity" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!ANTHROPIC_API_KEY) {
+      console.error("ANTHROPIC_API_KEY is not configured");
+      throw new Error("ANTHROPIC_API_KEY is not configured");
     }
 
-    const txList = transactions.map((tx, i) => 
+    const txList = transactions.map((tx, i) =>
       `${i}: "${tx.description}" | ${tx.amount} | ${tx.sourceAccount || "N/A"}`
     ).join("\n");
 
@@ -118,41 +122,50 @@ You MUST always return a classification. Never skip a transaction.
 Return ONLY a valid JSON array with one object per transaction (same order as input):
 [{"poste":"...","categorie_treso":"...","categorie_pnl":"...","confidence":75,"needs_review":false}]`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    console.log("Calling Anthropic Claude API...");
+
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
+        "x-api-key": ANTHROPIC_API_KEY,
+        "content-type": "application/json",
+        "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 4096,
+        system: systemPrompt,
         messages: [
-          { role: "system", content: systemPrompt },
           { role: "user", content: `Categorize these ${transactions.length} transactions:\n${txList}` },
         ],
       }),
     });
 
+    console.log(`Anthropic response status: ${response.status}`);
+
     if (!response.ok) {
+      const errText = await response.text();
+      console.error("Anthropic API error:", response.status, errText);
+
       if (response.status === 429) {
         return new Response(
           JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      if (response.status === 402) {
+      if (response.status === 401) {
         return new Response(
-          JSON.stringify({ error: "AI credits exhausted. Please add funds in Settings → Workspace → Usage." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ error: "Invalid Anthropic API key. Please check your configuration." }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      const errText = await response.text();
-      console.error("AI gateway error:", response.status, errText);
-      throw new Error("AI gateway error");
+      throw new Error(`Anthropic API error: ${response.status}`);
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || "";
+    console.log("Anthropic response received, parsing content...");
+
+    const content = data.content?.[0]?.text || "";
 
     const jsonMatch = content.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
@@ -161,6 +174,7 @@ Return ONLY a valid JSON array with one object per transaction (same order as in
     }
 
     const results = JSON.parse(jsonMatch[0]);
+    console.log(`Successfully categorized ${results.length} transactions`);
 
     return new Response(JSON.stringify({ results }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
