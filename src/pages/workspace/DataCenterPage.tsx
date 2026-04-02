@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useState, useCallback, useEffect } from 'react';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Upload, FileText, FileSpreadsheet, File, Trash2, RefreshCw, Loader2, AlertTriangle, Download, ShieldCheck, Sparkles, CheckCircle2, XCircle, BookOpen, CreditCard, HelpCircle, Plus } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useProjectStore } from '@/store/useProjectStore';
@@ -39,6 +39,7 @@ interface PendingFile {
 export default function DataCenterPage() {
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const pid = projectId || '';
   const files = useProjectFiles(pid);
   const addFile = useProjectStore((s) => s.addFile);
@@ -505,6 +506,17 @@ export default function DataCenterPage() {
     input.onchange = (e) => { const f = (e.target as HTMLInputElement).files; if (f) handleFiles(f); };
     input.click();
   };
+
+  // Handle sidebar import triggers via query param
+  useEffect(() => {
+    const importFlow = searchParams.get('import');
+    if (!importFlow) return;
+    // Clear the param so it doesn't re-trigger
+    setSearchParams({}, { replace: true });
+    if (importFlow === 'gl') handleImportGL();
+    else if (importFlow === 'tx') handleImportTransactions();
+    else if (importFlow === 'auto') handleImportAutoDetect();
+  }, [searchParams]);
 
   return (
     <div>
