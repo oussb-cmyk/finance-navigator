@@ -479,44 +479,29 @@ export default function DataCenterPage() {
     return <File className="h-4 w-4 text-info" />;
   };
 
-  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importMenuOpen, setImportMenuOpen] = useState(false);
 
   const handleImportGL = () => {
-    setImportModalOpen(false);
+    setImportMenuOpen(false);
     const input = document.createElement('input');
-    input.type = 'file';
-    input.multiple = true;
-    input.accept = '.xlsx,.xls,.csv';
-    input.onchange = (e) => {
-      const f = (e.target as HTMLInputElement).files;
-      if (f) handleTemplateUpload(f);
-    };
+    input.type = 'file'; input.multiple = true; input.accept = '.xlsx,.xls,.csv';
+    input.onchange = (e) => { const f = (e.target as HTMLInputElement).files; if (f) handleTemplateUpload(f); };
     input.click();
   };
 
   const handleImportTransactions = () => {
-    setImportModalOpen(false);
+    setImportMenuOpen(false);
     const input = document.createElement('input');
-    input.type = 'file';
-    input.multiple = true;
-    input.accept = '.xlsx,.xls,.csv';
-    input.onchange = (e) => {
-      const f = (e.target as HTMLInputElement).files;
-      if (f) handleFiles(f);
-    };
+    input.type = 'file'; input.multiple = true; input.accept = '.xlsx,.xls,.csv';
+    input.onchange = (e) => { const f = (e.target as HTMLInputElement).files; if (f) handleFiles(f); };
     input.click();
   };
 
   const handleImportAutoDetect = () => {
-    setImportModalOpen(false);
+    setImportMenuOpen(false);
     const input = document.createElement('input');
-    input.type = 'file';
-    input.multiple = true;
-    input.accept = '.xlsx,.xls,.csv';
-    input.onchange = (e) => {
-      const f = (e.target as HTMLInputElement).files;
-      if (f) handleFiles(f);
-    };
+    input.type = 'file'; input.multiple = true; input.accept = '.xlsx,.xls,.csv';
+    input.onchange = (e) => { const f = (e.target as HTMLInputElement).files; if (f) handleFiles(f); };
     input.click();
   };
 
@@ -527,92 +512,80 @@ export default function DataCenterPage() {
           <h1 className="page-title">Data Center</h1>
           <p className="page-subtitle">Import, manage, and prepare your financial data</p>
         </div>
-        <Button size="lg" onClick={() => setImportModalOpen(true)} className="gap-2">
-          <Plus className="h-4 w-4" />
-          Import Data
-        </Button>
+        <div className="relative">
+          <Button size="lg" onClick={() => setImportMenuOpen(prev => !prev)} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Import Data
+          </Button>
+
+          {/* ─── Contextual Import Dropdown ──────────────────────── */}
+          {importMenuOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setImportMenuOpen(false)} />
+              <div className="absolute right-0 top-full mt-2 z-50 w-[380px] rounded-xl border border-border bg-card shadow-lg animate-fade-in origin-top-right">
+                <div className="px-4 pt-4 pb-2">
+                  <p className="text-sm font-semibold text-foreground">Import your data</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Choose the format that matches your file</p>
+                </div>
+                <div className="px-2 pb-2 space-y-0.5">
+                  {/* GL Option */}
+                  <button
+                    onClick={handleImportGL}
+                    className="w-full flex items-start gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-accent/50 group"
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 group-hover:bg-primary/15 transition-colors">
+                      <BookOpen className="h-4 w-4 text-primary" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-foreground">General Ledger (GL)</span>
+                        <span className="text-[9px] font-semibold uppercase tracking-wider text-primary bg-primary/10 px-1.5 py-0.5 rounded-full leading-none">Recommended</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                        Structured accounting data with debit/credit — Sage, Pennylane exports
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* Transactions Option */}
+                  <button
+                    onClick={handleImportTransactions}
+                    className="w-full flex items-start gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-accent/50 group"
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-info/10 group-hover:bg-info/15 transition-colors">
+                      <CreditCard className="h-4 w-4 text-info" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium text-foreground">Transactions</span>
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                        Bank or operational data (CSV, Qonto, Excel) — auto-categorize into Poste, P&L, Treasury
+                      </p>
+                    </div>
+                  </button>
+
+                  <div className="border-t border-border mx-1 my-1" />
+
+                  {/* Auto-detect Option */}
+                  <button
+                    onClick={handleImportAutoDetect}
+                    className="w-full flex items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-accent/50 group"
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted group-hover:bg-muted/80 transition-colors">
+                      <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-sm font-medium text-foreground">Not sure? Auto-detect</span>
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                        Upload your file and we'll determine the format automatically
+                      </p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
-
-      {/* ─── Import Selection Modal ─────────────────────────────── */}
-      <Dialog open={importModalOpen} onOpenChange={setImportModalOpen}>
-        <DialogContent className="sm:max-w-xl">
-          <DialogHeader>
-            <DialogTitle>What type of data are you importing?</DialogTitle>
-            <DialogDescription>
-              Choose the format that matches your file to ensure the best import experience.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3 py-2">
-            {/* Option 1: General Ledger */}
-            <button
-              onClick={handleImportGL}
-              className="group relative flex items-start gap-4 rounded-xl border-2 border-border bg-card p-5 text-left transition-all hover:border-primary/50 hover:shadow-md"
-            >
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                <BookOpen className="h-5 w-5 text-primary" />
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-foreground">General Ledger (GL)</h3>
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full">Recommended</span>
-                </div>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Import structured accounting data with debit/credit columns — from Sage, Pennylane, or other accounting software.
-                </p>
-                <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1"><ShieldCheck className="h-3 w-3 text-primary" /> 100% accurate</span>
-                  <span>•</span>
-                  <span>Template-based</span>
-                  <span>•</span>
-                  <span>Debit / Credit</span>
-                </div>
-              </div>
-            </button>
-
-            {/* Option 2: Transactions */}
-            <button
-              onClick={handleImportTransactions}
-              className="group relative flex items-start gap-4 rounded-xl border-2 border-border bg-card p-5 text-left transition-all hover:border-info/50 hover:shadow-md"
-            >
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-info/10">
-                <CreditCard className="h-5 w-5 text-info" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-foreground">Transactions</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Import raw bank or operational data (CSV, Qonto, Excel) and categorize it into Poste, P&L, and Treasury categories.
-                </p>
-                <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1"><Sparkles className="h-3 w-3 text-info" /> Auto-categorize</span>
-                  <span>•</span>
-                  <span>Bank exports</span>
-                  <span>•</span>
-                  <span>Single amount</span>
-                </div>
-                <p className="mt-1.5 text-[11px] text-muted-foreground/70 italic">
-                  Use our template for best results — or upload any CSV/Excel file.
-                </p>
-              </div>
-            </button>
-
-            {/* Option 3: Auto-detect */}
-            <button
-              onClick={handleImportAutoDetect}
-              className="group relative flex items-start gap-4 rounded-xl border border-dashed border-border bg-muted/30 p-5 text-left transition-all hover:border-muted-foreground/40 hover:shadow-sm"
-            >
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-muted">
-                <HelpCircle className="h-5 w-5 text-muted-foreground" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-medium text-foreground">Not sure? Let us detect it</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Upload your file and we'll automatically determine whether it's a general ledger or transaction dataset.
-                </p>
-              </div>
-            </button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* ─── Empty State / Quick Actions ─────────────────────────── */}
       {files.length === 0 && (
@@ -636,7 +609,7 @@ export default function DataCenterPage() {
               <Download className="h-3.5 w-3.5 mr-1" />
               Download Transaction Template
             </Button>
-            <Button size="sm" onClick={() => setImportModalOpen(true)}>
+            <Button size="sm" onClick={() => setImportMenuOpen(true)}>
               <Plus className="h-3.5 w-3.5 mr-1" />
               Import Data
             </Button>
