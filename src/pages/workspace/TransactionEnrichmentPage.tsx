@@ -367,10 +367,12 @@ export default function TransactionEnrichmentPage() {
                 const isEditing = editingId === tx.id;
                 const isMissing = !tx.poste || tx.poste === 'Autres charges';
                 const isAiUpdated = aiUpdatedIds.has(tx.id);
+                const conf = aiConfidence[tx.id];
+                const isReview = conf?.needs_review;
                 return (
                   <TableRow
                     key={tx.id}
-                    className={`${isMissing ? 'bg-warning/5' : ''} ${isAiUpdated ? 'bg-primary/10 animate-pulse' : ''} transition-colors`}
+                    className={`${isMissing ? 'bg-warning/5' : ''} ${isAiUpdated ? 'bg-primary/10 animate-pulse' : ''} ${isReview ? 'bg-destructive/5 border-l-2 border-l-destructive/40' : ''} transition-colors`}
                   >
                     <TableCell>
                       <Checkbox checked={selected.has(tx.id)} onCheckedChange={() => toggleSelect(tx.id)} />
