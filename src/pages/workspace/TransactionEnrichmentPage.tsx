@@ -72,6 +72,8 @@ export default function TransactionEnrichmentPage() {
   const [editForm, setEditForm] = useState<Partial<Transaction>>({});
   const [aiLoading, setAiLoading] = useState(false);
   const [aiUpdatedIds, setAiUpdatedIds] = useState<Set<string>>(new Set());
+  const [aiConfidence, setAiConfidence] = useState<Record<string, { confidence: number; needs_review: boolean }>>({});
+  const [filterReview, setFilterReview] = useState(false);
 
   // Stats
   const mappedCount = useMemo(() => transactions.filter(t => t.isMapped && t.poste).length, [transactions]);
