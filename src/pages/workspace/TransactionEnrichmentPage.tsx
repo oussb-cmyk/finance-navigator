@@ -96,8 +96,9 @@ export default function TransactionEnrichmentPage() {
     if (filterCategory !== 'all') result = result.filter(t => t.categorieTreso === filterCategory);
     if (filterMapped === 'mapped') result = result.filter(t => t.isMapped);
     if (filterMapped === 'unmapped') result = result.filter(t => !t.isMapped || !t.poste);
+    if (filterReview) result = result.filter(t => aiConfidence[t.id]?.needs_review);
     return result;
-  }, [transactions, searchQuery, filterPoste, filterCategory, filterMapped]);
+  }, [transactions, searchQuery, filterPoste, filterCategory, filterMapped, filterReview, aiConfidence]);
 
   const toggleSelect = (id: string) => {
     setSelected(prev => {
