@@ -184,6 +184,8 @@ export default function TransactionEnrichmentPage() {
           break;
         }
 
+        console.log('AI RESPONSE data:', JSON.stringify(data));
+
         const results = data?.results as Array<{
           poste: string;
           categorie_treso: string;
@@ -192,9 +194,11 @@ export default function TransactionEnrichmentPage() {
           needs_review?: boolean;
         }> | undefined;
 
-        if (results && results.length === batch.length) {
+        if (results && results.length > 0) {
+          console.log(`AI returned ${results.length} results for ${batch.length} transactions`);
           const newConfMap: Record<string, { confidence: number; needs_review: boolean }> = {};
-          for (let j = 0; j < batch.length; j++) {
+          const limit = Math.min(results.length, batch.length);
+          for (let j = 0; j < limit; j++) {
             const r = results[j];
             if (r?.poste) {
               updateTransaction(pid, batch[j].id, {
@@ -212,6 +216,9 @@ export default function TransactionEnrichmentPage() {
             }
           }
           setAiConfidence(prev => ({ ...prev, ...newConfMap }));
+        } else {
+          console.error('AI returned no results. data:', data);
+          toast.error('AI returned no results for this batch');
         }
       }
 
