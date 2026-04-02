@@ -585,7 +585,7 @@ export default function DataCenterPage() {
                   <Download className="h-3.5 w-3.5 mr-1" />
                   Download GL Template
                 </Button>
-                <Button size="sm" className="gap-1.5" onClick={handleImportGL}>
+                <Button size="sm" className="gap-1.5" onClick={triggerGLUpload}>
                   <Plus className="h-3.5 w-3.5" />
                   Upload GL File
                 </Button>
@@ -597,7 +597,7 @@ export default function DataCenterPage() {
                   <Download className="h-3.5 w-3.5 mr-1" />
                   Download TX Template
                 </Button>
-                <Button size="sm" className="gap-1.5" onClick={handleImportTransactions}>
+                <Button size="sm" className="gap-1.5" onClick={triggerTxUpload}>
                   <Plus className="h-3.5 w-3.5" />
                   Upload Transactions
                 </Button>
@@ -619,7 +619,7 @@ export default function DataCenterPage() {
               </div>
               <div className="px-2 pb-2 space-y-0.5">
                 <button
-                  onClick={handleImportGL}
+                  onClick={triggerGLUpload}
                   className="w-full flex items-start gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-accent/50 group"
                 >
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 group-hover:bg-primary/15 transition-colors">
@@ -636,7 +636,7 @@ export default function DataCenterPage() {
                   </div>
                 </button>
                 <button
-                  onClick={handleImportTransactions}
+                  onClick={triggerTxUpload}
                   className="w-full flex items-start gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-accent/50 group"
                 >
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-info/10 group-hover:bg-info/15 transition-colors">
@@ -651,7 +651,7 @@ export default function DataCenterPage() {
                 </button>
                 <div className="border-t border-border mx-1 my-1" />
                 <button
-                  onClick={handleImportAutoDetect}
+                  onClick={handleSelectAutoDetect}
                   className="w-full flex items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-accent/50 group"
                 >
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted group-hover:bg-muted/80 transition-colors">
@@ -724,7 +724,7 @@ export default function DataCenterPage() {
               <Download className="h-3.5 w-3.5 mr-1" />
               Download GL Template
             </Button>
-            <Button size="sm" onClick={handleImportGL}>
+            <Button size="sm" onClick={triggerGLUpload}>
               <Plus className="h-3.5 w-3.5 mr-1" />
               Upload GL File
             </Button>
@@ -750,7 +750,7 @@ export default function DataCenterPage() {
               <Download className="h-3.5 w-3.5 mr-1" />
               Download TX Template
             </Button>
-            <Button size="sm" onClick={handleImportTransactions}>
+            <Button size="sm" onClick={triggerTxUpload}>
               <Plus className="h-3.5 w-3.5 mr-1" />
               Upload Transactions
             </Button>
