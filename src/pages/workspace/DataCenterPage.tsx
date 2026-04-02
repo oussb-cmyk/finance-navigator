@@ -466,93 +466,178 @@ export default function DataCenterPage() {
     return <File className="h-4 w-4 text-info" />;
   };
 
+  const [importModalOpen, setImportModalOpen] = useState(false);
+
+  const handleImportGL = () => {
+    setImportModalOpen(false);
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.accept = '.xlsx,.xls,.csv';
+    input.onchange = (e) => {
+      const f = (e.target as HTMLInputElement).files;
+      if (f) handleTemplateUpload(f);
+    };
+    input.click();
+  };
+
+  const handleImportTransactions = () => {
+    setImportModalOpen(false);
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.accept = '.xlsx,.xls,.csv';
+    input.onchange = (e) => {
+      const f = (e.target as HTMLInputElement).files;
+      if (f) handleFiles(f);
+    };
+    input.click();
+  };
+
+  const handleImportAutoDetect = () => {
+    setImportModalOpen(false);
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.multiple = true;
+    input.accept = '.xlsx,.xls,.csv';
+    input.onchange = (e) => {
+      const f = (e.target as HTMLInputElement).files;
+      if (f) handleFiles(f);
+    };
+    input.click();
+  };
+
   return (
     <div>
-      <div className="page-header">
-        <h1 className="page-title">Data Center</h1>
-        <p className="page-subtitle">Upload financial files — use our template for best results, or let AI parse any format</p>
+      <div className="page-header flex items-center justify-between">
+        <div>
+          <h1 className="page-title">Data Center</h1>
+          <p className="page-subtitle">Import, manage, and prepare your financial data</p>
+        </div>
+        <Button size="lg" onClick={() => setImportModalOpen(true)} className="gap-2">
+          <Plus className="h-4 w-4" />
+          Import Data
+        </Button>
       </div>
 
-      {/* ─── Dual Import Mode Cards ─────────────────────────────── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        {/* Mode 1: Template (recommended) */}
-        <div className="relative bg-card border-2 border-primary/30 rounded-xl p-6 flex flex-col">
-          <span className="absolute -top-2.5 left-4 bg-primary text-primary-foreground text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full">
-            Recommended
-          </span>
-          <div className="flex items-center gap-2 mb-2">
-            <ShieldCheck className="h-5 w-5 text-primary" />
-            <h3 className="font-semibold text-foreground">Upload Your Data (Recommended)</h3>
+      {/* ─── Import Selection Modal ─────────────────────────────── */}
+      <Dialog open={importModalOpen} onOpenChange={setImportModalOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>What type of data are you importing?</DialogTitle>
+            <DialogDescription>
+              Choose the format that matches your file to ensure the best import experience.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 py-2">
+            {/* Option 1: General Ledger */}
+            <button
+              onClick={handleImportGL}
+              className="group relative flex items-start gap-4 rounded-xl border-2 border-border bg-card p-5 text-left transition-all hover:border-primary/50 hover:shadow-md"
+            >
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                <BookOpen className="h-5 w-5 text-primary" />
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-foreground">General Ledger (GL)</h3>
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full">Recommended</span>
+                </div>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Import structured accounting data with debit/credit columns — from Sage, Pennylane, or other accounting software.
+                </p>
+                <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1"><ShieldCheck className="h-3 w-3 text-primary" /> 100% accurate</span>
+                  <span>•</span>
+                  <span>Template-based</span>
+                  <span>•</span>
+                  <span>Debit / Credit</span>
+                </div>
+              </div>
+            </button>
+
+            {/* Option 2: Transactions */}
+            <button
+              onClick={handleImportTransactions}
+              className="group relative flex items-start gap-4 rounded-xl border-2 border-border bg-card p-5 text-left transition-all hover:border-info/50 hover:shadow-md"
+            >
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-info/10">
+                <CreditCard className="h-5 w-5 text-info" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-foreground">Transactions</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Import raw bank or operational data (CSV, Qonto, Excel) and categorize it into Poste, P&L, and Treasury categories.
+                </p>
+                <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1"><Sparkles className="h-3 w-3 text-info" /> Auto-categorize</span>
+                  <span>•</span>
+                  <span>Bank exports</span>
+                  <span>•</span>
+                  <span>Single amount</span>
+                </div>
+              </div>
+            </button>
+
+            {/* Option 3: Auto-detect */}
+            <button
+              onClick={handleImportAutoDetect}
+              className="group relative flex items-start gap-4 rounded-xl border border-dashed border-border bg-muted/30 p-5 text-left transition-all hover:border-muted-foreground/40 hover:shadow-sm"
+            >
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-muted">
+                <HelpCircle className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-medium text-foreground">Not sure? Let us detect it</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Upload your file and we'll automatically determine whether it's a general ledger or transaction dataset.
+                </p>
+              </div>
+            </button>
           </div>
-          <p className="text-xs text-muted-foreground mb-1 flex-1">
-            Use our template for accurate and reliable data import
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Empty State / Quick Actions ─────────────────────────── */}
+      {files.length === 0 && (
+        <div
+          className={`border-2 border-dashed rounded-xl p-12 text-center mb-6 transition-colors ${dragOver ? 'border-primary bg-primary/5' : 'border-border'}`}
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={handleDrop}
+        >
+          <Upload className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+          <p className="text-base font-semibold text-foreground mb-1">No files imported yet</p>
+          <p className="text-sm text-muted-foreground mb-4">
+            Drag & drop files here, or click "Import Data" to get started
           </p>
-          <p className="text-[10px] text-primary font-medium mb-3">✓ This method guarantees 100% accurate import — no AI, no guessing</p>
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={downloadTemplate}>
-                <Download className="h-3.5 w-3.5 mr-1" />
-                Download Template
-              </Button>
-              <Button size="sm" onClick={() => {
-                const input = document.createElement('input');
-                input.type = 'file';
-                input.accept = '.xlsx,.xls,.csv';
-                input.onchange = (e) => {
-                  const f = (e.target as HTMLInputElement).files;
-                  if (f) handleTemplateUpload(f);
-                };
-                input.click();
-              }}>
-                Upload Data
-              </Button>
-            </div>
-            <p className="text-[10px] text-muted-foreground">Make sure your file follows the template format</p>
+          <div className="flex items-center justify-center gap-3">
+            <Button variant="outline" size="sm" onClick={downloadTemplate}>
+              <Download className="h-3.5 w-3.5 mr-1" />
+              Download GL Template
+            </Button>
+            <Button size="sm" onClick={() => setImportModalOpen(true)}>
+              <Plus className="h-3.5 w-3.5 mr-1" />
+              Import Data
+            </Button>
           </div>
         </div>
+      )}
 
-        {/* Mode 2: Any file (AI) */}
-        <div className="bg-card border border-border rounded-xl p-6 flex flex-col">
-          <div className="flex items-center gap-2 mb-2">
-            <Sparkles className="h-5 w-5 text-warning" />
-            <h3 className="font-semibold text-foreground">Upload Any File</h3>
-            <span className="text-[10px] font-medium uppercase tracking-wider text-warning bg-warning/10 px-1.5 py-0.5 rounded">Beta</span>
-          </div>
-          <p className="text-xs text-muted-foreground mb-4 flex-1">
-            Upload Excel or CSV in any format. AI will auto-detect structure, but results may require manual review.
+      {/* ─── Drag Zone (when files exist) ───────────────────────── */}
+      {files.length > 0 && (
+        <div
+          className={`border-2 border-dashed rounded-xl p-6 text-center mb-6 transition-colors ${dragOver ? 'border-primary bg-primary/5' : 'border-border'}`}
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={handleDrop}
+        >
+          <Upload className="h-6 w-6 text-muted-foreground mx-auto mb-1" />
+          <p className="text-xs text-muted-foreground">
+            Drag & drop additional files here — we'll auto-detect the format
           </p>
-          <Button variant="outline" size="sm" className="self-start" onClick={() => {
-            const input = document.createElement('input');
-            input.type = 'file';
-            input.multiple = true;
-            input.accept = '.xlsx,.xls,.csv';
-            input.onchange = (e) => {
-              const f = (e.target as HTMLInputElement).files;
-              if (f) handleFiles(f);
-            };
-            input.click();
-          }}>
-            Browse Files
-          </Button>
         </div>
-      </div>
-
-      {/* ─── Drag & Drop Zone ───────────────────────────────────── */}
-      <div
-        className={`border-2 border-dashed rounded-xl p-8 text-center mb-6 transition-colors ${dragOver ? 'border-primary bg-primary/5' : 'border-border'}`}
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={handleDrop}
-      >
-        <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-        <p className="text-sm font-medium text-foreground mb-1">Drag & drop files here</p>
-        <p className="text-xs text-muted-foreground">
-          Excel (.xlsx, .xls) and CSV — template files are imported directly, other formats use AI parsing
-        </p>
-        <p className="text-xs text-primary mt-2 font-medium">
-          💡 Tip: Use our template for best results
-        </p>
-      </div>
+      )}
 
       {/* ─── File Table ─────────────────────────────────────────── */}
       {files.length > 0 && (
