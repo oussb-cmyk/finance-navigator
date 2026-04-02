@@ -9,6 +9,7 @@ import {
   FileOutput,
   Download,
   ChevronLeft,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useProjectStore } from '@/store/useProjectStore';
