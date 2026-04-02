@@ -41,6 +41,7 @@ const demoProject: Project = {
   id: DEMO_PROJECT_ID,
   name: 'FY 2024 Audit',
   company: 'Acme Corp',
+  activity: 'SaaS',
   currency: 'USD',
   fiscalYearEnd: '2024-12-31',
   createdAt: '2024-01-15',
