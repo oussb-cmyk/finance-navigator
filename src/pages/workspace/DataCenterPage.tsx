@@ -24,6 +24,9 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import type { UploadedFile } from '@/types/finance';
 import { useImportMetaStore } from '@/store/useImportMetaStore';
+import { useTransactionStore } from '@/store/useTransactionStore';
+import { detectTransactionColumns, autoCategorize } from '@/lib/transactionCategorization';
+import type { Transaction } from '@/types/transaction';
 
 interface PendingFile {
   fileId: string;
