@@ -578,10 +578,8 @@ export default function DataCenterPage() {
                     </div>
                   </button>
                 </div>
-              </div>
-            </>
-          )}
-        </div>
+              </PopoverContent>
+            </Popover>
       </div>
 
       {/* ─── Empty State / Quick Actions ─────────────────────────── */}
