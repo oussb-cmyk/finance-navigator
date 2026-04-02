@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { CheckCircle2, AlertTriangle, Filter, Search, Edit3, Trash2, ArrowUpDown } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Filter, Search, Edit3, Trash2, ArrowUpDown, Loader2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -10,9 +10,11 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { Table, TableHeader, TableHead, TableBody, TableRow, TableCell } from '@/components/ui/table';
 import { toast } from 'sonner';
 import { useTransactionStore } from '@/store/useTransactionStore';
+import { useProjectStore } from '@/store/useProjectStore';
 import { POSTES, CATEGORIES_TRESO, CATEGORIES_PNL } from '@/types/transaction';
 import type { Transaction } from '@/types/transaction';
 import { autoCategorize } from '@/lib/transactionCategorization';
+import { supabase } from '@/integrations/supabase/client';
 
 function ComboSelect({ value, options, onChange, placeholder }: {
   value: string; options: readonly string[]; onChange: (v: string) => void; placeholder?: string;
