@@ -484,40 +484,49 @@ export default function DataCenterPage() {
 
   const [importMenuOpen, setImportMenuOpen] = useState(false);
 
-  const handleImportGL = () => {
+  // Mode selection only — no file picker
+  const handleSelectGL = () => {
     setImportMenuOpen(false);
     setImportMode('gl');
+  };
+
+  const handleSelectTransactions = () => {
+    setImportMenuOpen(false);
+    setImportMode('tx');
+  };
+
+  const handleSelectAutoDetect = () => {
+    setImportMenuOpen(false);
+    // Auto-detect opens file picker immediately since it needs the file to determine mode
+    const input = document.createElement('input');
+    input.type = 'file'; input.multiple = true; input.accept = '.xlsx,.xls,.csv';
+    input.onchange = (e) => { const f = (e.target as HTMLInputElement).files; if (f) handleFiles(f); };
+    input.click();
+  };
+
+  // Explicit upload triggers — only called when user clicks "Upload" button
+  const triggerGLUpload = () => {
     const input = document.createElement('input');
     input.type = 'file'; input.multiple = true; input.accept = '.xlsx,.xls,.csv';
     input.onchange = (e) => { const f = (e.target as HTMLInputElement).files; if (f) handleTemplateUpload(f); };
     input.click();
   };
 
-  const handleImportTransactions = () => {
-    setImportMenuOpen(false);
-    setImportMode('tx');
+  const triggerTxUpload = () => {
     const input = document.createElement('input');
     input.type = 'file'; input.multiple = true; input.accept = '.xlsx,.xls,.csv';
     input.onchange = (e) => { const f = (e.target as HTMLInputElement).files; if (f) handleFiles(f); };
     input.click();
   };
 
-  const handleImportAutoDetect = () => {
-    setImportMenuOpen(false);
-    const input = document.createElement('input');
-    input.type = 'file'; input.multiple = true; input.accept = '.xlsx,.xls,.csv';
-    input.onchange = (e) => { const f = (e.target as HTMLInputElement).files; if (f) handleFiles(f); };
-    input.click();
-  };
-
-  // Handle sidebar import triggers via query param
+  // Handle sidebar import triggers via query param — only set mode
   useEffect(() => {
     const importFlow = searchParams.get('import');
     if (!importFlow) return;
     setSearchParams({}, { replace: true });
-    if (importFlow === 'gl') { setImportMode('gl'); handleImportGL(); }
-    else if (importFlow === 'tx') { setImportMode('tx'); handleImportTransactions(); }
-    else if (importFlow === 'auto') handleImportAutoDetect();
+    if (importFlow === 'gl') setImportMode('gl');
+    else if (importFlow === 'tx') setImportMode('tx');
+    else if (importFlow === 'auto') handleSelectAutoDetect();
   }, [searchParams]);
 
   // Filter files by mode
@@ -576,7 +585,7 @@ export default function DataCenterPage() {
                   <Download className="h-3.5 w-3.5 mr-1" />
                   Download GL Template
                 </Button>
-                <Button size="sm" className="gap-1.5" onClick={handleImportGL}>
+                <Button size="sm" className="gap-1.5" onClick={triggerGLUpload}>
                   <Plus className="h-3.5 w-3.5" />
                   Upload GL File
                 </Button>
@@ -588,7 +597,7 @@ export default function DataCenterPage() {
                   <Download className="h-3.5 w-3.5 mr-1" />
                   Download TX Template
                 </Button>
-                <Button size="sm" className="gap-1.5" onClick={handleImportTransactions}>
+                <Button size="sm" className="gap-1.5" onClick={triggerTxUpload}>
                   <Plus className="h-3.5 w-3.5" />
                   Upload Transactions
                 </Button>
@@ -610,7 +619,7 @@ export default function DataCenterPage() {
               </div>
               <div className="px-2 pb-2 space-y-0.5">
                 <button
-                  onClick={handleImportGL}
+                  onClick={handleSelectGL}
                   className="w-full flex items-start gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-accent/50 group"
                 >
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 group-hover:bg-primary/15 transition-colors">
@@ -627,7 +636,7 @@ export default function DataCenterPage() {
                   </div>
                 </button>
                 <button
-                  onClick={handleImportTransactions}
+                  onClick={handleSelectTransactions}
                   className="w-full flex items-start gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-accent/50 group"
                 >
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-info/10 group-hover:bg-info/15 transition-colors">
@@ -642,7 +651,7 @@ export default function DataCenterPage() {
                 </button>
                 <div className="border-t border-border mx-1 my-1" />
                 <button
-                  onClick={handleImportAutoDetect}
+                  onClick={handleSelectAutoDetect}
                   className="w-full flex items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-accent/50 group"
                 >
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted group-hover:bg-muted/80 transition-colors">
@@ -715,7 +724,7 @@ export default function DataCenterPage() {
               <Download className="h-3.5 w-3.5 mr-1" />
               Download GL Template
             </Button>
-            <Button size="sm" onClick={handleImportGL}>
+            <Button size="sm" onClick={triggerGLUpload}>
               <Plus className="h-3.5 w-3.5 mr-1" />
               Upload GL File
             </Button>
@@ -741,7 +750,7 @@ export default function DataCenterPage() {
               <Download className="h-3.5 w-3.5 mr-1" />
               Download TX Template
             </Button>
-            <Button size="sm" onClick={handleImportTransactions}>
+            <Button size="sm" onClick={triggerTxUpload}>
               <Plus className="h-3.5 w-3.5 mr-1" />
               Upload Transactions
             </Button>
