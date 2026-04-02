@@ -507,6 +507,17 @@ export default function DataCenterPage() {
     input.click();
   };
 
+  // Handle sidebar import triggers via query param
+  useEffect(() => {
+    const importFlow = searchParams.get('import');
+    if (!importFlow) return;
+    // Clear the param so it doesn't re-trigger
+    setSearchParams({}, { replace: true });
+    if (importFlow === 'gl') handleImportGL();
+    else if (importFlow === 'tx') handleImportTransactions();
+    else if (importFlow === 'auto') handleImportAutoDetect();
+  }, [searchParams]);
+
   return (
     <div>
       <div className="page-header flex items-center justify-between">
