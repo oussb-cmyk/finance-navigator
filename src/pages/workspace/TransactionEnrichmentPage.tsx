@@ -404,6 +404,22 @@ export default function TransactionEnrichmentPage() {
                     <TableCell>
                       <ComboSelect value={tx.categoriePnL} options={CATEGORIES_PNL} onChange={(v) => handleFieldChange(tx.id, 'categoriePnL', v)} placeholder="Cat. P&L" />
                     </TableCell>
+                    <TableCell className="text-xs">
+                      {aiConfidence[tx.id] ? (
+                        <div className="flex items-center gap-1.5">
+                          <div className={`h-2 w-2 rounded-full shrink-0 ${
+                            aiConfidence[tx.id].confidence >= 80 ? 'bg-emerald-500' :
+                            aiConfidence[tx.id].confidence >= 50 ? 'bg-amber-500' : 'bg-red-500'
+                          }`} />
+                          <span className="font-medium">{aiConfidence[tx.id].confidence}%</span>
+                          {aiConfidence[tx.id].needs_review && (
+                            <AlertTriangle className="h-3 w-3 text-warning" />
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-xs mono">
                       {isEditing ? (
                         <Input type="number" value={editForm.tva ?? ''} onChange={(e) => setEditForm(f => ({ ...f, tva: parseFloat(e.target.value) || 0 }))} className="h-7 text-xs w-[60px]" />
