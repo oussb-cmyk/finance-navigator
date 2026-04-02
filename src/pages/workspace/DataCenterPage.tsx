@@ -619,7 +619,7 @@ export default function DataCenterPage() {
               </div>
               <div className="px-2 pb-2 space-y-0.5">
                 <button
-                  onClick={triggerGLUpload}
+                  onClick={handleSelectGL}
                   className="w-full flex items-start gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-accent/50 group"
                 >
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 group-hover:bg-primary/15 transition-colors">
