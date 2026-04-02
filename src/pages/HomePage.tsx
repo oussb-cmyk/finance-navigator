@@ -15,12 +15,13 @@ export default function HomePage() {
   const [form, setForm] = useState({ name: '', company: '', activity: '', currency: 'USD' });
 
   const handleCreate = () => {
-    if (!form.name || !form.company) return;
+    if (!form.name || !form.company || !form.activity) return;
     const id = `proj-${Date.now()}`;
     addProject({
       id,
       name: form.name,
       company: form.company,
+      activity: form.activity,
       currency: form.currency,
       fiscalYearEnd: new Date().toISOString().slice(0, 10),
       createdAt: new Date().toISOString().slice(0, 10),
@@ -30,7 +31,7 @@ export default function HomePage() {
       entriesCount: 0,
       unmappedAccounts: 0,
     });
-    setForm({ name: '', company: '', currency: 'USD' });
+    setForm({ name: '', company: '', activity: '', currency: 'USD' });
     setOpen(false);
     navigate(`/project/${id}/overview`);
   };
