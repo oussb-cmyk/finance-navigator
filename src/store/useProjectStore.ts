@@ -56,6 +56,7 @@ const demoProject2: Project = {
   id: 'demo-2',
   name: 'Q1 2024 Review',
   company: 'Globex Inc',
+  activity: 'Consulting',
   currency: 'EUR',
   fiscalYearEnd: '2024-03-31',
   createdAt: '2024-02-01',

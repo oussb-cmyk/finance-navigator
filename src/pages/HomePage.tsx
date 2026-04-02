@@ -67,10 +67,15 @@ export default function HomePage() {
                   <Input placeholder="e.g. Acme Corp" value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} />
                 </div>
                 <div>
+                  <Label>Business Activity <span className="text-destructive">*</span></Label>
+                  <Input placeholder="e.g. Restaurant, SaaS, Real Estate, E-commerce, Consulting" value={form.activity} onChange={(e) => setForm({ ...form, activity: e.target.value })} />
+                  <p className="text-xs text-muted-foreground mt-1">Used for AI-powered transaction categorization</p>
+                </div>
+                <div>
                   <Label>Currency</Label>
                   <Input placeholder="USD" value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })} />
                 </div>
-                <Button onClick={handleCreate} className="w-full">Create Project</Button>
+                <Button onClick={handleCreate} className="w-full" disabled={!form.name || !form.company || !form.activity}>Create Project</Button>
               </div>
             </DialogContent>
           </Dialog>
