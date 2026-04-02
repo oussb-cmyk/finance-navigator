@@ -589,6 +589,9 @@ export default function DataCenterPage() {
                   <span>•</span>
                   <span>Single amount</span>
                 </div>
+                <p className="mt-1.5 text-[11px] text-muted-foreground/70 italic">
+                  Use our template for best results — or upload any CSV/Excel file.
+                </p>
               </div>
             </button>
 
