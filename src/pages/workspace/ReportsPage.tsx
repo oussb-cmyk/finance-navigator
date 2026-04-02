@@ -1,10 +1,11 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useProjectStore } from '@/store/useProjectStore';
 import { useImportMetaStore } from '@/store/useImportMetaStore';
 import { useProjectFiles, useProjectEntries, useProjectMappings } from '@/hooks/useStableStoreSelectors';
 import { FileText, CheckCircle, AlertTriangle, Clock, ShieldCheck } from 'lucide-react';
 
+const EMPTY_IMPORT_METAS: any[] = [];
 export default function ReportsPage() {
   const { projectId } = useParams();
   const pid = projectId || '';
@@ -15,8 +16,8 @@ export default function ReportsPage() {
   const validated = entries.filter(e => e.isValidated).length;
   const unmapped = mappings.filter(m => !m.isMapped).length;
   const rawFiles = files.filter(f => f.status === 'raw').length;
-  const importHistory = useImportMetaStore((s) => s.imports[pid] || []);
   const importMetas = useImportMetaStore((s) => s.imports[pid]);
+  const importHistory = importMetas ?? EMPTY_IMPORT_METAS;
   const reliabilityData = useMemo(() => {
     const metas = importMetas || [];
     if (metas.length === 0) return { score: 0, lastImportDate: null };
