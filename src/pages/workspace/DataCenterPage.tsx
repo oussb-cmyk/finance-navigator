@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Upload, FileText, FileSpreadsheet, File, Trash2, RefreshCw, Loader2, AlertTriangle, Download, ShieldCheck, Sparkles, CheckCircle2, XCircle, BookOpen, CreditCard, HelpCircle, Plus } from 'lucide-react';
+import { Upload, FileText, FileSpreadsheet, File, Trash2, RefreshCw, Loader2, AlertTriangle, Download, ShieldCheck, Sparkles, CheckCircle2, XCircle, BookOpen, CreditCard, HelpCircle, Plus, ArrowLeft } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useProjectStore } from '@/store/useProjectStore';
 import { useLearningStore, generateFileFingerprint } from '@/store/useLearningStore';
