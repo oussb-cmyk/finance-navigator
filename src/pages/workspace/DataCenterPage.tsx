@@ -609,7 +609,7 @@ export default function DataCenterPage() {
               <Download className="h-3.5 w-3.5 mr-1" />
               Download Transaction Template
             </Button>
-            <Button size="sm" onClick={() => setImportModalOpen(true)}>
+            <Button size="sm" onClick={() => setImportMenuOpen(true)}>
               <Plus className="h-3.5 w-3.5 mr-1" />
               Import Data
             </Button>
