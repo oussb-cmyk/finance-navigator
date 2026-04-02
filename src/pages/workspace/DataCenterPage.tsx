@@ -36,6 +36,7 @@ interface PendingFile {
 
 export default function DataCenterPage() {
   const { projectId } = useParams();
+  const navigate = useNavigate();
   const pid = projectId || '';
   const files = useProjectFiles(pid);
   const addFile = useProjectStore((s) => s.addFile);
@@ -49,6 +50,7 @@ export default function DataCenterPage() {
   const saveFileFingerprint = useLearningStore((s) => s.saveFileFingerprint);
   const getAccountConfidenceBoost = useLearningStore((s) => s.getAccountConfidenceBoost);
   const addImportMeta = useImportMetaStore((s) => s.addImport);
+  const addTransactions = useTransactionStore((s) => s.addTransactions);
 
   const [dragOver, setDragOver] = useState(false);
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
