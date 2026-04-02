@@ -188,9 +188,12 @@ export default function TransactionEnrichmentPage() {
           poste: string;
           categorie_treso: string;
           categorie_pnl: string;
+          confidence?: number;
+          needs_review?: boolean;
         }> | undefined;
 
         if (results && results.length === batch.length) {
+          const newConfMap: Record<string, { confidence: number; needs_review: boolean }> = {};
           for (let j = 0; j < batch.length; j++) {
             const r = results[j];
             if (r?.poste) {
@@ -201,9 +204,14 @@ export default function TransactionEnrichmentPage() {
                 isMapped: true,
               });
               newAiIds.add(batch[j].id);
+              newConfMap[batch[j].id] = {
+                confidence: r.confidence ?? 50,
+                needs_review: r.needs_review ?? false,
+              };
               totalUpdated++;
             }
           }
+          setAiConfidence(prev => ({ ...prev, ...newConfMap }));
         }
       }
 
