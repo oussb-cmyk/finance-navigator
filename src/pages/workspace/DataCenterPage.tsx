@@ -421,6 +421,32 @@ export default function DataCenterPage() {
   const handleFallbackToMapping = () => { setDialogMode('tabular'); };
   const closePending = () => { setPendingFile(null); setDialogMode(null); };
 
+  // ─── Transaction preview confirm handler ───────────────────────
+  const handleTxPreviewConfirm = useCallback((txs: Transaction[]) => {
+    if (!projectId || !txPreview) return;
+    addTransactions(projectId, txs);
+    updateFileStatus(projectId, txPreview.fileId, 'processed', txs.length);
+    toast.success(`${txs.length} transactions imported from "${txPreview.fileName}"`, { duration: 5000 });
+    setTxPreview(null);
+    navigate(`/project/${projectId}/transactions`);
+  }, [projectId, txPreview, addTransactions, updateFileStatus, navigate]);
+
+  // ─── Transaction template download ────────────────────────────
+  const downloadTransactionTemplate = useCallback(() => {
+    const wb = XLSX.utils.book_new();
+    const data = [
+      ['Date', 'Description', 'Amount', 'Source Account', 'Entity', 'TVA'],
+      ['2024-01-15', 'URSSAF - Cotisations', '-3500', 'Banque Principale', 'Société A', '0'],
+      ['2024-01-20', 'Facture client #1234', '12000', 'Banque Principale', 'Société A', '20'],
+      ['2024-02-01', 'Loyer bureaux', '-2500', 'Banque Principale', 'Société A', '20'],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    ws['!cols'] = [{ wch: 14 }, { wch: 30 }, { wch: 12 }, { wch: 20 }, { wch: 15 }, { wch: 6 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Transactions');
+    XLSX.writeFile(wb, 'transaction_template.xlsx');
+    toast.success('Transaction template downloaded');
+  }, []);
+
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault(); setDragOver(false);
     if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
