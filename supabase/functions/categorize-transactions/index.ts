@@ -13,6 +13,57 @@ interface TransactionInput {
   sourceAccount?: string;
 }
 
+function extractJsonArray(content: string): unknown[] {
+  // Try direct parse
+  try {
+    const parsed = JSON.parse(content);
+    if (Array.isArray(parsed)) return parsed;
+  } catch { /* continue */ }
+
+  // Extract from markdown code blocks
+  const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeBlockMatch) {
+    try {
+      const parsed = JSON.parse(codeBlockMatch[1].trim());
+      if (Array.isArray(parsed)) return parsed;
+    } catch { /* continue */ }
+  }
+
+  // Find JSON array in mixed text
+  const arrayMatch = content.match(/\[[\s\S]*\]/);
+  if (arrayMatch) {
+    try {
+      return JSON.parse(arrayMatch[0]);
+    } catch {
+      // Try repairing truncated JSON
+      let repaired = arrayMatch[0];
+      let braces = 0, brackets = 0;
+      for (const c of repaired) {
+        if (c === '{') braces++;
+        if (c === '}') braces--;
+        if (c === '[') brackets++;
+        if (c === ']') brackets--;
+      }
+      while (braces > 0) { repaired += '}'; braces--; }
+      while (brackets > 0) { repaired += ']'; brackets--; }
+      try { return JSON.parse(repaired); } catch { /* fall through */ }
+    }
+  }
+
+  throw new Error("Could not extract valid JSON array from response");
+}
+
+function defaultResult(tx: TransactionInput) {
+  const isExpense = tx.amount < 0;
+  return {
+    poste: isExpense ? "Achats de prestations de services" : "Chiffre d'affaires",
+    categorie_treso: isExpense ? "Décaissements d'exploitation" : "Encaissements d'exploitation",
+    categorie_pnl: isExpense ? "Charges d'exploitation" : "Produits d'exploitation",
+    confidence: 10,
+    needs_review: true,
+  };
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -27,7 +78,6 @@ serve(async (req) => {
     console.log(`Received ${transactions?.length ?? 0} transactions for activity: ${activity}`);
 
     if (!transactions?.length || !activity) {
-      console.error("Missing transactions or activity");
       return new Response(
         JSON.stringify({ error: "Missing transactions or activity" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -46,81 +96,25 @@ serve(async (req) => {
 
     const systemPrompt = `You are a financial transaction classification engine specialized in: ${activity}.
 
-Your goal is to classify transactions EVEN when descriptions are unclear, generic, or contain only references (e.g. invoice numbers, codes).
+Return ONLY a valid JSON array. NO text, NO explanation, NO markdown.
 
-IMPORTANT:
-- Return ONLY valid JSON
-- No explanation
-- No text outside the JSON array
+Each item must be:
+{"poste":"...","categorie_treso":"...","categorie_pnl":"...","confidence":0-100,"needs_review":true/false}
 
-For each transaction, return:
-- poste
-- categorie_treso
-- categorie_pnl
-- confidence (0 to 100)
-- needs_review (true or false)
+Rules:
+- Negative amount → expense → categorie_treso: "Décaissements d'exploitation"
+- Positive amount → revenue → categorie_treso: "Encaissements d'exploitation"
+- Unclear description (FACT, REF, codes) → infer from business activity "${activity}" and amount sign
+- Default expense: poste "Achats de prestations de services", categorie_pnl "Charges d'exploitation"
+- Default revenue: poste "Chiffre d'affaires", categorie_pnl "Produits d'exploitation"
+- Clear keyword → confidence 90-100, needs_review false
+- Medium clarity → confidence 60-80, needs_review false  
+- Low clarity → confidence 30-60, needs_review true
+- Taxes → "Impôts et taxes", Salaries → "Masse salariale"
 
-Core logic:
+Keywords: facebook/ads/google → Publicité, loyer → Loyer, urssaf → Masse salariale, stripe → Chiffre d'affaires, assurance → Assurances, logiciel/saas → Logiciels et abonnements
 
-1. Amount:
-- Negative → expense → "Décaissements d'exploitation"
-- Positive → revenue → "Encaissements d'exploitation"
-
-2. Interpretation (CRITICAL):
-If the description is unclear (e.g. "FACT", invoice number, code):
-You MUST infer using:
-- The business activity: ${activity}
-- Typical business behavior
-- Common accounting patterns
-
-Examples:
-- "FACT", "invoice", unknown supplier → default to "Achats de prestations de services"
-- Random company name → assume supplier → expense
-- Person name → salary or contractor → Masse salariale OR Honoraires
-- Bank / transfer → Compte courant
-
-Context rules:
-- Adapt categorization to the business activity
-- Example: in SaaS, 'Stripe' = revenue
-- Example: in real estate, 'loyer' can be income or expense depending on context
-
-3. Confidence scoring:
-- Very clear keyword match (facebook, urssaf, loyer, etc.) → confidence: 90–100, needs_review: false
-- Medium clarity (supplier name, partial meaning) → confidence: 60–80, needs_review: false
-- Low clarity (FACT, REF, unknown code, vague text) → confidence: 30–60, needs_review: true
-- Very ambiguous / guess → confidence: ≤40, needs_review: true
-
-4. Default fallback (VERY IMPORTANT):
-If you cannot clearly identify:
-- For negative amount:
-  → poste: "Achats de prestations de services"
-  → categorie_treso: "Décaissements d'exploitation"
-  → categorie_pnl: "Charges d'exploitation"
-- For positive amount:
-  → poste: "Chiffre d'affaires"
-  → categorie_treso: "Encaissements d'exploitation"
-  → categorie_pnl: "Produits d'exploitation"
-
-5. Financial rules:
-- NEVER classify financing as expense
-- Taxes → Impôts et taxes
-- Salaries → Masse salariale
-
-Keyword hints:
-- 'facebook', 'ads', 'google' → Publicité et marketing
-- 'loyer' → Loyer et charges locatives
-- 'urssaf' → Masse salariale
-- 'salary', 'payroll' → Masse salariale
-- 'loan', 'emprunt' → Emprunts et financements
-- 'tax', 'tva' → Impôts et taxes
-- 'stripe', 'payment', 'virement client' → Chiffre d'affaires
-- 'assurance', 'insurance' → Assurances
-- 'logiciel', 'software', 'saas', 'subscription' → Logiciels et abonnements
-
-You MUST always return a classification. Never skip a transaction.
-
-Return ONLY a valid JSON array with one object per transaction (same order as input):
-[{"poste":"...","categorie_treso":"...","categorie_pnl":"...","confidence":75,"needs_review":false}]`;
+Return exactly ${transactions.length} items. ONLY JSON ARRAY.`;
 
     console.log("Calling Anthropic Claude API...");
 
@@ -146,7 +140,6 @@ Return ONLY a valid JSON array with one object per transaction (same order as in
     if (!response.ok) {
       const errText = await response.text();
       console.error("Anthropic API error:", response.status, errText);
-
       if (response.status === 429) {
         return new Response(
           JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
@@ -155,7 +148,7 @@ Return ONLY a valid JSON array with one object per transaction (same order as in
       }
       if (response.status === 401) {
         return new Response(
-          JSON.stringify({ error: "Invalid Anthropic API key. Please check your configuration." }),
+          JSON.stringify({ error: "Invalid Anthropic API key." }),
           { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -163,20 +156,40 @@ Return ONLY a valid JSON array with one object per transaction (same order as in
     }
 
     const data = await response.json();
-    console.log("Anthropic response received, parsing content...");
+    const rawText = data.content?.[0]?.text || "";
+    console.log("RAW AI RESPONSE:", rawText.substring(0, 500));
 
-    const content = data.content?.[0]?.text || "";
-
-    const jsonMatch = content.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) {
-      console.error("Failed to parse AI response:", content);
-      throw new Error("Invalid AI response format");
+    let results: unknown[];
+    try {
+      results = extractJsonArray(rawText);
+    } catch (parseErr) {
+      console.error("JSON PARSE ERROR:", parseErr, "Raw:", rawText.substring(0, 300));
+      // Fallback: return default categorization
+      results = transactions.map(defaultResult);
     }
 
-    const results = JSON.parse(jsonMatch[0]);
-    console.log(`Successfully categorized ${results.length} transactions`);
+    // Validate length
+    if (results.length !== transactions.length) {
+      console.error(`Result count mismatch: expected ${transactions.length}, got ${results.length}`);
+      // Pad or trim to match
+      while (results.length < transactions.length) {
+        results.push(defaultResult(transactions[results.length]));
+      }
+      results = results.slice(0, transactions.length);
+    }
 
-    return new Response(JSON.stringify({ results }), {
+    // Sanitize each result
+    const sanitized = results.map((item: any, i: number) => ({
+      poste: item.poste || defaultResult(transactions[i]).poste,
+      categorie_treso: item.categorie_treso || defaultResult(transactions[i]).categorie_treso,
+      categorie_pnl: item.categorie_pnl || defaultResult(transactions[i]).categorie_pnl,
+      confidence: typeof item.confidence === "number" ? item.confidence : 10,
+      needs_review: typeof item.needs_review === "boolean" ? item.needs_review : true,
+    }));
+
+    console.log(`Successfully categorized ${sanitized.length} transactions`);
+
+    return new Response(JSON.stringify({ results: sanitized }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (e) {
