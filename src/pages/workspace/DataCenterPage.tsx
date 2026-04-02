@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { Upload, FileText, FileSpreadsheet, File, Trash2, RefreshCw, Loader2, AlertTriangle, Download, ShieldCheck, Sparkles, CheckCircle2, XCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useProjectStore } from '@/store/useProjectStore';
