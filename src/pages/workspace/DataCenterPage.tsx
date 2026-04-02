@@ -802,8 +802,8 @@ export default function DataCenterPage() {
           learnedPatterns={useTransactionStore.getState().getLearnedPatterns(pid)}
           onConfirm={handleTxPreviewConfirm}
         />
+      )}
 
-      {/* Template validation errors dialog */}
       {templateErrorDialogOpen && templateErrors.length > 0 && (
         <Dialog open onOpenChange={(open) => { if (!open) { setTemplateErrorDialogOpen(false); setTemplateErrors([]); setTemplateValidationResult(null); } }}>
           <DialogContent className="sm:max-w-lg max-h-[80vh]">
