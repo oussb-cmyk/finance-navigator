@@ -262,8 +262,12 @@ export default function TransactionEnrichmentPage() {
         <div className="flex items-center gap-2 bg-warning/10 border border-warning/30 rounded-lg px-3 py-2 mb-4 text-sm">
           <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
           <span className="text-foreground">{unmappedCount} transaction{unmappedCount > 1 ? 's' : ''} need categorization before generating reports.</span>
-          <Button size="sm" variant="outline" className="ml-auto" onClick={handleAutoCategorizeAll}>
-            Auto-categorize
+          <Button size="sm" variant="outline" className="ml-auto gap-2" onClick={handleAutoCategorizeAll} disabled={aiLoading}>
+            {aiLoading ? (
+              <><Loader2 className="h-3.5 w-3.5 animate-spin" />AI is categorizing...</>
+            ) : (
+              <><Sparkles className="h-3.5 w-3.5" />Auto-categorize with AI</>
+            )}
           </Button>
         </div>
       )}
