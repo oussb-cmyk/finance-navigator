@@ -790,6 +790,19 @@ export default function DataCenterPage() {
         />
       )}
 
+      {/* ★ Transaction Preview Dialog */}
+      {txPreview && (
+        <TransactionPreviewDialog
+          open
+          onOpenChange={(open) => { if (!open) setTxPreview(null); }}
+          rawRows={txPreview.rawRows}
+          headers={txPreview.headers}
+          fileName={txPreview.fileName}
+          detectedColumns={txPreview.detectedColumns}
+          learnedPatterns={useTransactionStore.getState().getLearnedPatterns(pid)}
+          onConfirm={handleTxPreviewConfirm}
+        />
+
       {/* Template validation errors dialog */}
       {templateErrorDialogOpen && templateErrors.length > 0 && (
         <Dialog open onOpenChange={(open) => { if (!open) { setTemplateErrorDialogOpen(false); setTemplateErrors([]); setTemplateValidationResult(null); } }}>
