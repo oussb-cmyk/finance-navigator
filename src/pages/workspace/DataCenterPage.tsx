@@ -56,6 +56,7 @@ export default function DataCenterPage() {
   const addTransactions = useTransactionStore((s) => s.addTransactions);
 
   const [dragOver, setDragOver] = useState(false);
+  const [importMode, setImportMode] = useState<'gl' | 'tx' | null>(null);
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
   const [rawFiles, setRawFiles] = useState<Map<string, globalThis.File>>(new Map());
 
