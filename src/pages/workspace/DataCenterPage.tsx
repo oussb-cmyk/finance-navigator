@@ -486,6 +486,7 @@ export default function DataCenterPage() {
 
   const handleImportGL = () => {
     setImportMenuOpen(false);
+    setImportMode('gl');
     const input = document.createElement('input');
     input.type = 'file'; input.multiple = true; input.accept = '.xlsx,.xls,.csv';
     input.onchange = (e) => { const f = (e.target as HTMLInputElement).files; if (f) handleTemplateUpload(f); };
@@ -494,6 +495,7 @@ export default function DataCenterPage() {
 
   const handleImportTransactions = () => {
     setImportMenuOpen(false);
+    setImportMode('tx');
     const input = document.createElement('input');
     input.type = 'file'; input.multiple = true; input.accept = '.xlsx,.xls,.csv';
     input.onchange = (e) => { const f = (e.target as HTMLInputElement).files; if (f) handleFiles(f); };
@@ -512,10 +514,9 @@ export default function DataCenterPage() {
   useEffect(() => {
     const importFlow = searchParams.get('import');
     if (!importFlow) return;
-    // Clear the param so it doesn't re-trigger
     setSearchParams({}, { replace: true });
-    if (importFlow === 'gl') handleImportGL();
-    else if (importFlow === 'tx') handleImportTransactions();
+    if (importFlow === 'gl') { setImportMode('gl'); handleImportGL(); }
+    else if (importFlow === 'tx') { setImportMode('tx'); handleImportTransactions(); }
     else if (importFlow === 'auto') handleImportAutoDetect();
   }, [searchParams]);
 
