@@ -311,6 +311,16 @@ export default function TransactionEnrichmentPage() {
             <SelectItem value="unmapped">Unmapped</SelectItem>
           </SelectContent>
         </Select>
+        <Button
+          size="sm"
+          variant={filterReview ? 'default' : 'outline'}
+          className="h-8 text-xs gap-1"
+          onClick={() => setFilterReview(!filterReview)}
+          disabled={Object.values(aiConfidence).filter(c => c.needs_review).length === 0}
+        >
+          <AlertTriangle className="h-3 w-3" />
+          Needs Review ({Object.values(aiConfidence).filter(c => c.needs_review).length})
+        </Button>
         <span className="text-xs text-muted-foreground">{filtered.length} result{filtered.length !== 1 ? 's' : ''}</span>
       </div>
 
