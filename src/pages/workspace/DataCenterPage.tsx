@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { Upload, FileText, FileSpreadsheet, File, Trash2, RefreshCw, Loader2, AlertTriangle, Download, ShieldCheck, Sparkles, CheckCircle2, XCircle, BookOpen, CreditCard, HelpCircle, Plus } from 'lucide-react';
+import { Upload, FileText, FileSpreadsheet, File, Trash2, RefreshCw, Loader2, AlertTriangle, Download, ShieldCheck, Sparkles, CheckCircle2, XCircle, BookOpen, CreditCard, HelpCircle, Plus, ArrowLeft } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { useProjectStore } from '@/store/useProjectStore';
 import { useLearningStore, generateFileFingerprint } from '@/store/useLearningStore';
@@ -56,6 +56,7 @@ export default function DataCenterPage() {
   const addTransactions = useTransactionStore((s) => s.addTransactions);
 
   const [dragOver, setDragOver] = useState(false);
+  const [importMode, setImportMode] = useState<'gl' | 'tx' | null>(null);
   const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
   const [rawFiles, setRawFiles] = useState<Map<string, globalThis.File>>(new Map());
 
@@ -485,6 +486,7 @@ export default function DataCenterPage() {
 
   const handleImportGL = () => {
     setImportMenuOpen(false);
+    setImportMode('gl');
     const input = document.createElement('input');
     input.type = 'file'; input.multiple = true; input.accept = '.xlsx,.xls,.csv';
     input.onchange = (e) => { const f = (e.target as HTMLInputElement).files; if (f) handleTemplateUpload(f); };
@@ -493,6 +495,7 @@ export default function DataCenterPage() {
 
   const handleImportTransactions = () => {
     setImportMenuOpen(false);
+    setImportMode('tx');
     const input = document.createElement('input');
     input.type = 'file'; input.multiple = true; input.accept = '.xlsx,.xls,.csv';
     input.onchange = (e) => { const f = (e.target as HTMLInputElement).files; if (f) handleFiles(f); };
@@ -511,122 +514,243 @@ export default function DataCenterPage() {
   useEffect(() => {
     const importFlow = searchParams.get('import');
     if (!importFlow) return;
-    // Clear the param so it doesn't re-trigger
     setSearchParams({}, { replace: true });
-    if (importFlow === 'gl') handleImportGL();
-    else if (importFlow === 'tx') handleImportTransactions();
+    if (importFlow === 'gl') { setImportMode('gl'); handleImportGL(); }
+    else if (importFlow === 'tx') { setImportMode('tx'); handleImportTransactions(); }
     else if (importFlow === 'auto') handleImportAutoDetect();
   }, [searchParams]);
 
+  // Filter files by mode
+  const glFiles = files.filter(f => {
+    // Files uploaded via GL template path are considered GL
+    // For simplicity, all files show in their respective mode
+    return true;
+  });
+
+  const modeTitle = importMode === 'gl' ? 'Import General Ledger' : importMode === 'tx' ? 'Import Transactions' : 'Data Center';
+  const modeSubtitle = importMode === 'gl'
+    ? 'Upload structured accounting data with debit/credit entries'
+    : importMode === 'tx'
+    ? 'Upload bank or operational data to categorize and enrich'
+    : 'Import, manage, and prepare your financial data';
+
   return (
     <div>
+      {/* ─── Header ───────────────────────────────────────────────── */}
       <div className="page-header flex items-center justify-between">
-        <div>
-          <h1 className="page-title">Data Center</h1>
-          <p className="page-subtitle">Import, manage, and prepare your financial data</p>
-        </div>
-        <Popover open={importMenuOpen} onOpenChange={setImportMenuOpen}>
-          <PopoverTrigger asChild>
-            <Button size="lg" className="gap-2">
-              <Plus className="h-4 w-4" />
-              Import Data
+        <div className="flex items-center gap-3">
+          {importMode && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setImportMode(null)}
+              className="gap-1.5 text-muted-foreground hover:text-foreground"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back
             </Button>
-          </PopoverTrigger>
-          <PopoverContent align="end" sideOffset={8} className="w-[380px] rounded-xl p-0 border-border shadow-lg">
-            <div className="px-4 pt-4 pb-2">
-              <p className="text-sm font-semibold text-foreground">Import your data</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Choose the format that matches your file</p>
+          )}
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="page-title">{modeTitle}</h1>
+              {importMode && (
+                <span className={`text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full leading-none ${
+                  importMode === 'gl'
+                    ? 'bg-primary/10 text-primary'
+                    : 'bg-info/10 text-info'
+                }`}>
+                  {importMode === 'gl' ? 'General Ledger' : 'Transactions'}
+                </span>
+              )}
             </div>
-            <div className="px-2 pb-2 space-y-0.5">
-              {/* GL Option */}
-              <button
-                onClick={handleImportGL}
-                className="w-full flex items-start gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-accent/50 group"
-              >
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 group-hover:bg-primary/15 transition-colors">
-                  <BookOpen className="h-4 w-4 text-primary" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium text-foreground">General Ledger (GL)</span>
-                    <span className="text-[9px] font-semibold uppercase tracking-wider text-primary bg-primary/10 px-1.5 py-0.5 rounded-full leading-none">Recommended</span>
+            <p className="page-subtitle">{modeSubtitle}</p>
+          </div>
+        </div>
+
+        {/* Import button — only show when mode is selected or no mode */}
+        {importMode ? (
+          <div className="flex items-center gap-2">
+            {importMode === 'gl' && (
+              <>
+                <Button variant="outline" size="sm" onClick={downloadTemplate}>
+                  <Download className="h-3.5 w-3.5 mr-1" />
+                  Download GL Template
+                </Button>
+                <Button size="sm" className="gap-1.5" onClick={handleImportGL}>
+                  <Plus className="h-3.5 w-3.5" />
+                  Upload GL File
+                </Button>
+              </>
+            )}
+            {importMode === 'tx' && (
+              <>
+                <Button variant="outline" size="sm" onClick={downloadTransactionTemplate}>
+                  <Download className="h-3.5 w-3.5 mr-1" />
+                  Download TX Template
+                </Button>
+                <Button size="sm" className="gap-1.5" onClick={handleImportTransactions}>
+                  <Plus className="h-3.5 w-3.5" />
+                  Upload Transactions
+                </Button>
+              </>
+            )}
+          </div>
+        ) : (
+          <Popover open={importMenuOpen} onOpenChange={setImportMenuOpen}>
+            <PopoverTrigger asChild>
+              <Button size="lg" className="gap-2">
+                <Plus className="h-4 w-4" />
+                Import Data
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" sideOffset={8} className="w-[380px] rounded-xl p-0 border-border shadow-lg">
+              <div className="px-4 pt-4 pb-2">
+                <p className="text-sm font-semibold text-foreground">Import your data</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Choose the format that matches your file</p>
+              </div>
+              <div className="px-2 pb-2 space-y-0.5">
+                <button
+                  onClick={handleImportGL}
+                  className="w-full flex items-start gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-accent/50 group"
+                >
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 group-hover:bg-primary/15 transition-colors">
+                    <BookOpen className="h-4 w-4 text-primary" />
                   </div>
-                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                    Structured accounting data with debit/credit — Sage, Pennylane exports
-                  </p>
-                </div>
-              </button>
-
-              {/* Transactions Option */}
-              <button
-                onClick={handleImportTransactions}
-                className="w-full flex items-start gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-accent/50 group"
-              >
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-info/10 group-hover:bg-info/15 transition-colors">
-                  <CreditCard className="h-4 w-4 text-info" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <span className="text-sm font-medium text-foreground">Transactions</span>
-                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                    Bank or operational data (CSV, Qonto, Excel) — auto-categorize into Poste, P&L, Treasury
-                  </p>
-                </div>
-              </button>
-
-              <div className="border-t border-border mx-1 my-1" />
-
-              {/* Auto-detect Option */}
-              <button
-                onClick={handleImportAutoDetect}
-                className="w-full flex items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-accent/50 group"
-              >
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted group-hover:bg-muted/80 transition-colors">
-                  <HelpCircle className="h-4 w-4 text-muted-foreground" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <span className="text-sm font-medium text-foreground">Not sure? Auto-detect</span>
-                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                    Upload your file and we'll determine the format automatically
-                  </p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-foreground">General Ledger (GL)</span>
+                      <span className="text-[9px] font-semibold uppercase tracking-wider text-primary bg-primary/10 px-1.5 py-0.5 rounded-full leading-none">Recommended</span>
                     </div>
-                  </button>
-                </div>
-              </PopoverContent>
-            </Popover>
+                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                      Structured accounting data with debit/credit — Sage, Pennylane exports
+                    </p>
+                  </div>
+                </button>
+                <button
+                  onClick={handleImportTransactions}
+                  className="w-full flex items-start gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-accent/50 group"
+                >
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-info/10 group-hover:bg-info/15 transition-colors">
+                    <CreditCard className="h-4 w-4 text-info" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium text-foreground">Transactions</span>
+                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                      Bank or operational data (CSV, Qonto, Excel) — auto-categorize into Poste, P&L, Treasury
+                    </p>
+                  </div>
+                </button>
+                <div className="border-t border-border mx-1 my-1" />
+                <button
+                  onClick={handleImportAutoDetect}
+                  className="w-full flex items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-accent/50 group"
+                >
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted group-hover:bg-muted/80 transition-colors">
+                    <HelpCircle className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm font-medium text-foreground">Not sure? Auto-detect</span>
+                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                      Upload your file and we'll determine the format automatically
+                    </p>
+                  </div>
+                </button>
+              </div>
+            </PopoverContent>
+          </Popover>
+        )}
       </div>
 
-      {/* ─── Empty State / Quick Actions ─────────────────────────── */}
-      {files.length === 0 && (
+      {/* ─── Mode Selection (when no mode) ───────────────────────── */}
+      {!importMode && files.length === 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <button
+            onClick={() => { setImportMode('gl'); }}
+            className="group flex flex-col items-start gap-3 rounded-xl border border-border bg-card p-6 text-left transition-all hover:border-primary/40 hover:shadow-md"
+          >
+            <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-primary/10 group-hover:bg-primary/15 transition-colors">
+              <BookOpen className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-base font-semibold text-foreground">General Ledger (GL)</p>
+              <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+                Import structured accounting data with debit/credit entries from Sage, Pennylane, or similar tools.
+              </p>
+            </div>
+            <span className="text-[9px] font-semibold uppercase tracking-wider text-primary bg-primary/10 px-2 py-0.5 rounded-full">Recommended</span>
+          </button>
+
+          <button
+            onClick={() => { setImportMode('tx'); }}
+            className="group flex flex-col items-start gap-3 rounded-xl border border-border bg-card p-6 text-left transition-all hover:border-info/40 hover:shadow-md"
+          >
+            <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-info/10 group-hover:bg-info/15 transition-colors">
+              <CreditCard className="h-5 w-5 text-info" />
+            </div>
+            <div>
+              <p className="text-base font-semibold text-foreground">Transactions</p>
+              <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+                Import bank or operational data (CSV, Qonto, Excel) and categorize into Poste, P&L, and Treasury.
+              </p>
+            </div>
+          </button>
+        </div>
+      )}
+
+      {/* ─── GL Mode: Empty State ────────────────────────────────── */}
+      {importMode === 'gl' && files.length === 0 && (
         <div
           className={`border-2 border-dashed rounded-xl p-12 text-center mb-6 transition-colors ${dragOver ? 'border-primary bg-primary/5' : 'border-border'}`}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
-          onDrop={handleDrop}
+          onDrop={(e) => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files.length) handleTemplateUpload(e.dataTransfer.files); }}
         >
-          <Upload className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-          <p className="text-base font-semibold text-foreground mb-1">No files imported yet</p>
+          <BookOpen className="h-10 w-10 text-primary/60 mx-auto mb-3" />
+          <p className="text-base font-semibold text-foreground mb-1">Upload your General Ledger</p>
           <p className="text-sm text-muted-foreground mb-4">
-            Drag & drop files here, or click "Import Data" to get started
+            Drag & drop your GL export here, or use the buttons above
           </p>
-          <div className="flex items-center justify-center gap-3 flex-wrap">
+          <div className="flex items-center justify-center gap-3">
             <Button variant="outline" size="sm" onClick={downloadTemplate}>
               <Download className="h-3.5 w-3.5 mr-1" />
               Download GL Template
             </Button>
-            <Button variant="outline" size="sm" onClick={downloadTransactionTemplate}>
-              <Download className="h-3.5 w-3.5 mr-1" />
-              Download Transaction Template
-            </Button>
-            <Button size="sm" onClick={() => setImportMenuOpen(true)}>
+            <Button size="sm" onClick={handleImportGL}>
               <Plus className="h-3.5 w-3.5 mr-1" />
-              Import Data
+              Upload GL File
             </Button>
           </div>
         </div>
       )}
 
-      {/* ─── Drag Zone (when files exist) ───────────────────────── */}
-      {files.length > 0 && (
+      {/* ─── TX Mode: Empty State ────────────────────────────────── */}
+      {importMode === 'tx' && files.length === 0 && (
+        <div
+          className={`border-2 border-dashed rounded-xl p-12 text-center mb-6 transition-colors ${dragOver ? 'border-info bg-info/5' : 'border-border'}`}
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files); }}
+        >
+          <CreditCard className="h-10 w-10 text-info/60 mx-auto mb-3" />
+          <p className="text-base font-semibold text-foreground mb-1">Upload your Transactions</p>
+          <p className="text-sm text-muted-foreground mb-4">
+            Drag & drop bank exports, CSV, or Excel files here
+          </p>
+          <div className="flex items-center justify-center gap-3">
+            <Button variant="outline" size="sm" onClick={downloadTransactionTemplate}>
+              <Download className="h-3.5 w-3.5 mr-1" />
+              Download TX Template
+            </Button>
+            <Button size="sm" onClick={handleImportTransactions}>
+              <Plus className="h-3.5 w-3.5 mr-1" />
+              Upload Transactions
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ─── No mode selected but has files ──────────────────────── */}
+      {!importMode && files.length > 0 && (
         <div
           className={`border-2 border-dashed rounded-xl p-6 text-center mb-6 transition-colors ${dragOver ? 'border-primary bg-primary/5' : 'border-border'}`}
           onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -636,6 +760,27 @@ export default function DataCenterPage() {
           <Upload className="h-6 w-6 text-muted-foreground mx-auto mb-1" />
           <p className="text-xs text-muted-foreground">
             Drag & drop additional files here — we'll auto-detect the format
+          </p>
+        </div>
+      )}
+
+      {/* ─── Drag Zone (when mode is set and files exist) ────────── */}
+      {importMode && files.length > 0 && (
+        <div
+          className={`border-2 border-dashed rounded-xl p-6 text-center mb-6 transition-colors ${dragOver ? 'border-primary bg-primary/5' : 'border-border'}`}
+          onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={(e) => {
+            e.preventDefault(); setDragOver(false);
+            if (e.dataTransfer.files.length) {
+              if (importMode === 'gl') handleTemplateUpload(e.dataTransfer.files);
+              else handleFiles(e.dataTransfer.files);
+            }
+          }}
+        >
+          <Upload className="h-6 w-6 text-muted-foreground mx-auto mb-1" />
+          <p className="text-xs text-muted-foreground">
+            Drag & drop additional {importMode === 'gl' ? 'GL' : 'transaction'} files here
           </p>
         </div>
       )}
@@ -691,20 +836,18 @@ export default function DataCenterPage() {
         </div>
       )}
 
-      {/* Tabular mode: Column mapping dialog */}
+      {/* GL Dialogs */}
       {pendingFile && dialogMode === 'tabular' && (
         <ColumnMappingDialog open onOpenChange={(open) => { if (!open) closePending(); }}
           preview={pendingFile.preview} onConfirm={handleMappingConfirm} />
       )}
 
-      {/* Hierarchical mode */}
       {pendingFile && dialogMode === 'hierarchical' && pendingFile.preview.hierarchicalResult && (
         <HierarchicalPreviewDialog open onOpenChange={(open) => { if (!open) closePending(); }}
           result={pendingFile.preview.hierarchicalResult} fileName={pendingFile.preview.fileName}
           onConfirm={handleHierarchicalConfirm} onFallbackToMapping={handleFallbackToMapping} />
       )}
 
-      {/* Report-style file warning dialog */}
       {pendingFile && dialogMode === 'report' && (
         <Dialog open onOpenChange={(open) => { if (!open) closePending(); }}>
           <DialogContent className="sm:max-w-lg">
@@ -760,13 +903,11 @@ export default function DataCenterPage() {
         </Dialog>
       )}
 
-      {/* Review & Validation dialog (AI scoring) */}
       {reviewRows && (
         <ReviewValidationDialog open onOpenChange={(open) => { if (!open) setReviewRows(null); }}
           scoredRows={reviewRows} fileName={reviewFileName} onConfirm={finalizeFromReview} />
       )}
 
-      {/* ★ Mandatory Import Preview Dialog */}
       {previewData && (
         <ImportPreviewDialog
           open
@@ -778,7 +919,6 @@ export default function DataCenterPage() {
         />
       )}
 
-      {/* ★ Transaction Preview Dialog */}
       {txPreview && (
         <TransactionPreviewDialog
           open
