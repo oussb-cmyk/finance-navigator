@@ -305,7 +305,7 @@ export default function DataCenterPage() {
         }
       }
     }
-  }, [projectId, addFile, updateFileStatus, saveFileFingerprint, addTransactions, navigate]);
+  }, [projectId, addFile, updateFileStatus, saveFileFingerprint]);
 
   /** Open import preview for AI-parsed rows */
   const openImportPreview = (
