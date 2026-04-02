@@ -60,6 +60,9 @@ export default function TransactionEnrichmentPage() {
   const deleteTransactions = useTransactionStore((s) => s.deleteTransactions);
   const learnFromCorrection = useTransactionStore((s) => s.learnFromCorrection);
 
+  const projects = useProjectStore((s) => s.projects);
+  const project = projects.find(p => p.id === pid);
+
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [filterPoste, setFilterPoste] = useState('all');
@@ -67,6 +70,8 @@ export default function TransactionEnrichmentPage() {
   const [filterMapped, setFilterMapped] = useState<'all' | 'mapped' | 'unmapped'>('all');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Transaction>>({});
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiUpdatedIds, setAiUpdatedIds] = useState<Set<string>>(new Set());
 
   // Stats
   const mappedCount = useMemo(() => transactions.filter(t => t.isMapped && t.poste).length, [transactions]);
