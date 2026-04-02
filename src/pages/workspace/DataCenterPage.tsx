@@ -624,10 +624,14 @@ export default function DataCenterPage() {
           <p className="text-sm text-muted-foreground mb-4">
             Drag & drop files here, or click "Import Data" to get started
           </p>
-          <div className="flex items-center justify-center gap-3">
+          <div className="flex items-center justify-center gap-3 flex-wrap">
             <Button variant="outline" size="sm" onClick={downloadTemplate}>
               <Download className="h-3.5 w-3.5 mr-1" />
               Download GL Template
+            </Button>
+            <Button variant="outline" size="sm" onClick={downloadTransactionTemplate}>
+              <Download className="h-3.5 w-3.5 mr-1" />
+              Download Transaction Template
             </Button>
             <Button size="sm" onClick={() => setImportModalOpen(true)}>
               <Plus className="h-3.5 w-3.5 mr-1" />
