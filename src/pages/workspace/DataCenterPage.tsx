@@ -68,6 +68,15 @@ export default function DataCenterPage() {
   // Import Preview dialog state (mandatory preview step)
   const [previewData, setPreviewData] = useState<{ rows: ImportRow[]; fileName: string; fileId: string; mode: 'template' | 'ai' } | null>(null);
 
+  // Transaction preview dialog state
+  const [txPreview, setTxPreview] = useState<{
+    rawRows: Record<string, unknown>[];
+    headers: string[];
+    fileName: string;
+    fileId: string;
+    detectedColumns: { dateCol: string; descCol: string; amountCol: string; sourceCol: string; entityCol: string; tvaCol: string };
+  } | null>(null);
+
   // Template validation error state
   const [templateErrors, setTemplateErrors] = useState<TemplateRowError[]>([]);
   const [templateErrorDialogOpen, setTemplateErrorDialogOpen] = useState(false);
