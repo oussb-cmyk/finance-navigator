@@ -636,7 +636,7 @@ export default function DataCenterPage() {
                   </div>
                 </button>
                 <button
-                  onClick={triggerTxUpload}
+                  onClick={handleSelectTransactions}
                   className="w-full flex items-start gap-3 rounded-lg px-3 py-3 text-left transition-colors hover:bg-accent/50 group"
                 >
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-info/10 group-hover:bg-info/15 transition-colors">
