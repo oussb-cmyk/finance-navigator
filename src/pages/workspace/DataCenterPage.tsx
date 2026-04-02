@@ -39,6 +39,7 @@ interface PendingFile {
 export default function DataCenterPage() {
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const pid = projectId || '';
   const files = useProjectFiles(pid);
   const addFile = useProjectStore((s) => s.addFile);
