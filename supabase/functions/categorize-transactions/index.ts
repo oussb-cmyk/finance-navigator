@@ -14,13 +14,11 @@ interface TransactionInput {
 }
 
 function extractJsonArray(content: string): unknown[] {
-  // Try direct parse
   try {
     const parsed = JSON.parse(content);
     if (Array.isArray(parsed)) return parsed;
   } catch { /* continue */ }
 
-  // Extract from markdown code blocks
   const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (codeBlockMatch) {
     try {
@@ -29,13 +27,11 @@ function extractJsonArray(content: string): unknown[] {
     } catch { /* continue */ }
   }
 
-  // Find JSON array in mixed text
   const arrayMatch = content.match(/\[[\s\S]*\]/);
   if (arrayMatch) {
     try {
       return JSON.parse(arrayMatch[0]);
     } catch {
-      // Try repairing truncated JSON
       let repaired = arrayMatch[0];
       let braces = 0, brackets = 0;
       for (const c of repaired) {
@@ -84,10 +80,10 @@ serve(async (req) => {
       );
     }
 
-    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!ANTHROPIC_API_KEY) {
-      console.error("ANTHROPIC_API_KEY is not configured");
-      throw new Error("ANTHROPIC_API_KEY is not configured");
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    if (!OPENAI_API_KEY) {
+      console.error("OPENAI_API_KEY is not configured");
+      throw new Error("OPENAI_API_KEY is not configured");
     }
 
     const txList = transactions.map((tx, i) =>
@@ -116,30 +112,30 @@ Keywords: facebook/ads/google → Publicité, loyer → Loyer, urssaf → Masse 
 
 Return exactly ${transactions.length} items. ONLY JSON ARRAY.`;
 
-    console.log("Calling Anthropic Claude API...");
+    console.log("Calling OpenAI ChatGPT API...");
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "content-type": "application/json",
-        "anthropic-version": "2023-06-01",
+        "Authorization": `Bearer ${OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 4096,
-        system: systemPrompt,
+        model: "gpt-4o-mini",
         messages: [
+          { role: "system", content: systemPrompt },
           { role: "user", content: `Categorize these ${transactions.length} transactions:\n${txList}` },
         ],
+        temperature: 0.1,
+        max_tokens: 4096,
       }),
     });
 
-    console.log(`Anthropic response status: ${response.status}`);
+    console.log(`OpenAI response status: ${response.status}`);
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error("Anthropic API error:", response.status, errText);
+      console.error("OpenAI API error:", response.status, errText);
       if (response.status === 429) {
         return new Response(
           JSON.stringify({ error: "Rate limit exceeded. Please try again in a moment." }),
@@ -148,15 +144,15 @@ Return exactly ${transactions.length} items. ONLY JSON ARRAY.`;
       }
       if (response.status === 401) {
         return new Response(
-          JSON.stringify({ error: "Invalid Anthropic API key." }),
+          JSON.stringify({ error: "Invalid OpenAI API key." }),
           { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
-      throw new Error(`Anthropic API error: ${response.status}`);
+      throw new Error(`OpenAI API error: ${response.status}`);
     }
 
     const data = await response.json();
-    const rawText = data.content?.[0]?.text || "";
+    const rawText = data.choices?.[0]?.message?.content || "";
     console.log("RAW AI RESPONSE:", rawText.substring(0, 500));
 
     let results: unknown[];
@@ -164,21 +160,17 @@ Return exactly ${transactions.length} items. ONLY JSON ARRAY.`;
       results = extractJsonArray(rawText);
     } catch (parseErr) {
       console.error("JSON PARSE ERROR:", parseErr, "Raw:", rawText.substring(0, 300));
-      // Fallback: return default categorization
       results = transactions.map(defaultResult);
     }
 
-    // Validate length
     if (results.length !== transactions.length) {
       console.error(`Result count mismatch: expected ${transactions.length}, got ${results.length}`);
-      // Pad or trim to match
       while (results.length < transactions.length) {
         results.push(defaultResult(transactions[results.length]));
       }
       results = results.slice(0, transactions.length);
     }
 
-    // Sanitize each result
     const sanitized = results.map((item: any, i: number) => ({
       poste: item.poste || defaultResult(transactions[i]).poste,
       categorie_treso: item.categorie_treso || defaultResult(transactions[i]).categorie_treso,
