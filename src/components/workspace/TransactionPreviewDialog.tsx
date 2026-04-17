@@ -34,6 +34,8 @@ export interface TransactionPreviewDialogProps {
   detectedColumns: ColumnDetection;
   learnedPatterns: LearnedPattern[];
   activity?: string;
+  companyName?: string;
+  activityDescription?: string;
   onConfirm: (transactions: Transaction[]) => void;
 }
 
@@ -67,7 +69,7 @@ function InlineSelect({ value, options, onChange, placeholder }: {
 }
 
 export function TransactionPreviewDialog({
-  open, onOpenChange, rawRows, headers, fileName, detectedColumns, learnedPatterns, activity, onConfirm,
+  open, onOpenChange, rawRows, headers, fileName, detectedColumns, learnedPatterns, activity, companyName, activityDescription, onConfirm,
 }: TransactionPreviewDialogProps) {
   // Column mapping state (user can adjust)
   const [colMap, setColMap] = useState<ColumnDetection>(detectedColumns);
@@ -207,7 +209,7 @@ export function TransactionPreviewDialog({
         }));
 
         const { data, error } = await supabase.functions.invoke('categorize-transactions', {
-          body: { transactions: payload, activity: effectiveActivity },
+          body: { transactions: payload, activity: effectiveActivity, companyName, activityDescription: activityDescription || effectiveActivity },
         });
 
         if (error) {

@@ -938,6 +938,8 @@ export default function DataCenterPage() {
           detectedColumns={txPreview.detectedColumns}
           learnedPatterns={useTransactionStore.getState().getLearnedPatterns(pid)}
           activity={useProjectStore.getState().projects.find(p => p.id === pid)?.activity}
+          companyName={useProjectStore.getState().projects.find(p => p.id === pid)?.company}
+          activityDescription={useProjectStore.getState().projects.find(p => p.id === pid)?.activity}
           onConfirm={handleTxPreviewConfirm}
         />
       )}
