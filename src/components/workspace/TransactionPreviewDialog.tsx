@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import { CheckCircle2, AlertTriangle, Search, Trash2, Sparkles, Download, ArrowRight, Edit3, X, Check } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Search, Trash2, Sparkles, Download, ArrowRight, Edit3, X, Check, Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -416,8 +416,9 @@ export function TransactionPreviewDialog({
             <Input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search transactions..." className="h-8 pl-8 text-xs" />
           </div>
-          <Button size="sm" variant="outline" onClick={handleAutoCategorize} className="h-8 text-xs gap-1">
-            <Sparkles className="h-3 w-3" /> Auto-categorize
+          <Button size="sm" variant="outline" onClick={handleAutoCategorize} disabled={isCategorizing} className="h-8 text-xs gap-1">
+            {isCategorizing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+            {isCategorizing ? 'Categorizing...' : 'Auto-categorize'}
           </Button>
           <Button size="sm" variant="outline" onClick={handleRemoveDuplicates} className="h-8 text-xs gap-1">
             Remove duplicates
