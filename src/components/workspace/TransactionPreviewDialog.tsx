@@ -207,7 +207,7 @@ export function TransactionPreviewDialog({
         }));
 
         const { data, error } = await supabase.functions.invoke('categorize-transactions', {
-          body: { transactions: payload, activity },
+          body: { transactions: payload, activity: effectiveActivity },
         });
 
         if (error) {
