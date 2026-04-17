@@ -3,7 +3,10 @@ import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AuthProvider } from "@/hooks/useAuth";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 import HomePage from "./pages/HomePage";
+import AuthPage from "./pages/AuthPage";
 import NotFound from "./pages/NotFound";
 import { WorkspaceLayout } from "./components/workspace/WorkspaceLayout";
 import OverviewPage from "./pages/workspace/OverviewPage";
@@ -16,6 +19,7 @@ import DashboardPage from "./pages/workspace/DashboardPage";
 import ReportsPage from "./pages/workspace/ReportsPage";
 import ExportPage from "./pages/workspace/ExportPage";
 import TransactionEnrichmentPage from "./pages/workspace/TransactionEnrichmentPage";
+import InvoicesPage from "./pages/workspace/InvoicesPage";
 
 const queryClient = new QueryClient();
 
@@ -25,23 +29,34 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/project/:projectId" element={<WorkspaceLayout />}>
-            <Route index element={<Navigate to="overview" replace />} />
-            <Route path="overview" element={<OverviewPage />} />
-            <Route path="data-center" element={<DataCenterPage />} />
-            <Route path="transactions" element={<TransactionEnrichmentPage />} />
-            <Route path="mapping" element={<MappingPage />} />
-            <Route path="journal-classification" element={<JournalClassificationPage />} />
-            <Route path="journal-entries" element={<JournalEntriesPage />} />
-            <Route path="statements" element={<StatementsPage />} />
-            <Route path="dashboard" element={<DashboardPage />} />
-            <Route path="reports" element={<ReportsPage />} />
-            <Route path="export" element={<ExportPage />} />
-          </Route>
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <AuthProvider>
+          <Routes>
+            <Route path="/auth" element={<AuthPage />} />
+            <Route path="/" element={<HomePage />} />
+            <Route
+              path="/project/:projectId"
+              element={
+                <ProtectedRoute>
+                  <WorkspaceLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<Navigate to="overview" replace />} />
+              <Route path="overview" element={<OverviewPage />} />
+              <Route path="invoices" element={<InvoicesPage />} />
+              <Route path="data-center" element={<DataCenterPage />} />
+              <Route path="transactions" element={<TransactionEnrichmentPage />} />
+              <Route path="mapping" element={<MappingPage />} />
+              <Route path="journal-classification" element={<JournalClassificationPage />} />
+              <Route path="journal-entries" element={<JournalEntriesPage />} />
+              <Route path="statements" element={<StatementsPage />} />
+              <Route path="dashboard" element={<DashboardPage />} />
+              <Route path="reports" element={<ReportsPage />} />
+              <Route path="export" element={<ExportPage />} />
+            </Route>
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
