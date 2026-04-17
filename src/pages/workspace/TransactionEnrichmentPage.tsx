@@ -152,6 +152,8 @@ export default function TransactionEnrichmentPage() {
 
   const handleAutoCategorizeAll = async () => {
     const activity = project?.activity || 'General';
+    const companyName = project?.company;
+    const activityDescription = project?.activity;
     const uncategorized = transactions.filter(t => !t.poste || t.poste === 'Autres charges');
     
     if (uncategorized.length === 0) {
@@ -175,7 +177,7 @@ export default function TransactionEnrichmentPage() {
         }));
 
         const { data, error } = await supabase.functions.invoke('categorize-transactions', {
-          body: { transactions: payload, activity },
+          body: { transactions: payload, activity, companyName, activityDescription },
         });
 
         if (error) {
