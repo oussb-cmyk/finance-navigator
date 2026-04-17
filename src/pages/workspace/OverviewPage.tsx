@@ -56,6 +56,76 @@ export default function OverviewPage() {
         <p className="page-subtitle">{project.company} · {project.currency} · Fiscal year ending {project.fiscalYearEnd}</p>
       </div>
 
+      {/* AI Context — editable */}
+      <div className="bg-card border border-border rounded-xl p-5 mb-6">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" />
+            <span className="text-sm font-medium">AI Context</span>
+            <span className="text-xs text-muted-foreground">Used to categorize transactions</span>
+          </div>
+          {!editing ? (
+            <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
+              <Pencil className="h-3.5 w-3.5 mr-1.5" />Edit
+            </Button>
+          ) : (
+            <div className="flex gap-2">
+              <Button variant="ghost" size="sm" onClick={() => {
+                setActivity(project.activity || '');
+                setActivityDescription(project.activityDescription || '');
+                setEditing(false);
+              }}>Cancel</Button>
+              <Button size="sm" onClick={() => {
+                if (!activity.trim()) { toast.error('Business Activity is required'); return; }
+                updateProject(project.id, { activity: activity.trim(), activityDescription: activityDescription.trim() });
+                setEditing(false);
+                toast.success('AI context updated');
+              }}>
+                <Save className="h-3.5 w-3.5 mr-1.5" />Save
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {!editing ? (
+          <div className="space-y-3">
+            <div>
+              <p className="text-xs text-muted-foreground mb-0.5">Business Activity</p>
+              <p className="text-sm">{project.activity || <span className="italic text-muted-foreground">Not set</span>}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-0.5">Activity Description</p>
+              <p className="text-sm whitespace-pre-wrap">
+                {project.activityDescription
+                  ? project.activityDescription
+                  : <span className="italic text-muted-foreground">Add a richer description (revenue streams, suppliers, recurring expenses…) for smarter AI categorization.</span>}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs">Business Activity *</Label>
+              <Input
+                value={activity}
+                onChange={(e) => setActivity(e.target.value)}
+                placeholder="e.g. Live music venue, SaaS, Restaurant"
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Activity Description</Label>
+              <Textarea
+                value={activityDescription}
+                onChange={(e) => setActivityDescription(e.target.value)}
+                rows={5}
+                placeholder="e.g. Independent live music venue with bar service. Revenue from ticket sales (TICKETNET, SeeTickets) and bar. Main expenses: artist fees, SACEM, URSSAF, rent."
+              />
+              <p className="text-xs text-muted-foreground mt-1">The richer this description, the better the AI categorizes ambiguous bank descriptions.</p>
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <KPICard label="Revenue" value={totalRevenue} previousValue={totalRevenue * 0.88} format="currency" icon={<DollarSign className="h-4 w-4" />} />
         <KPICard label="Expenses" value={totalExpenses} previousValue={totalExpenses * 0.92} format="currency" icon={<TrendingUp className="h-4 w-4" />} />
