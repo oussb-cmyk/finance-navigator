@@ -13,6 +13,7 @@ import { POSTES, CATEGORIES_TRESO, CATEGORIES_PNL } from '@/types/transaction';
 import type { Transaction } from '@/types/transaction';
 import { autoCategorize } from '@/lib/transactionCategorization';
 import type { LearnedPattern } from '@/lib/transactionCategorization';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 interface ColumnDetection {
