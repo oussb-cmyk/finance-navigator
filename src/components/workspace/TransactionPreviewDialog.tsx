@@ -67,7 +67,7 @@ function InlineSelect({ value, options, onChange, placeholder }: {
 }
 
 export function TransactionPreviewDialog({
-  open, onOpenChange, rawRows, headers, fileName, detectedColumns, learnedPatterns, onConfirm,
+  open, onOpenChange, rawRows, headers, fileName, detectedColumns, learnedPatterns, activity, onConfirm,
 }: TransactionPreviewDialogProps) {
   // Column mapping state (user can adjust)
   const [colMap, setColMap] = useState<ColumnDetection>(detectedColumns);
