@@ -33,6 +33,7 @@ export interface TransactionPreviewDialogProps {
   fileName: string;
   detectedColumns: ColumnDetection;
   learnedPatterns: LearnedPattern[];
+  activity?: string;
   onConfirm: (transactions: Transaction[]) => void;
 }
 
