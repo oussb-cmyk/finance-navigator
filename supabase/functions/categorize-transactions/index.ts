@@ -66,12 +66,14 @@ serve(async (req) => {
   }
 
   try {
-    const { transactions, activity } = (await req.json()) as {
+    const { transactions, activity, companyName, activityDescription } = (await req.json()) as {
       transactions: TransactionInput[];
       activity: string;
+      companyName?: string;
+      activityDescription?: string;
     };
 
-    console.log(`Received ${transactions?.length ?? 0} transactions for activity: ${activity}`);
+    console.log(`Received ${transactions?.length ?? 0} transactions | company: ${companyName ?? 'N/A'} | activity: ${activity}`);
 
     if (!transactions?.length || !activity) {
       return new Response(
@@ -90,7 +92,22 @@ serve(async (req) => {
       `${i}: "${tx.description}" | ${tx.amount} | ${tx.sourceAccount || "N/A"}`
     ).join("\n");
 
-    const systemPrompt = `You are a financial transaction classification engine specialized in: ${activity}.
+    const systemPrompt = `You are a financial analyst.
+
+Company context:
+- Company name: ${companyName || 'N/A'}
+- Industry: ${activity}
+- Description: ${activityDescription || activity}
+
+Use this context to interpret transactions.
+
+Important:
+- You MUST infer meaning even if descriptions are unclear
+- Examples:
+  "TICKETNET" → ticket sales → revenue
+  "URSSAF" → social charges
+  "VIR EUROPEEN" → generic transfer → infer from amount and context
+- If unsure, still provide best guess and set "confidence" low (30-60) and "needs_review": true
 
 Return ONLY a valid JSON array. NO text, NO explanation, NO markdown.
 
@@ -100,11 +117,10 @@ Each item must be:
 Rules:
 - Negative amount → expense → categorie_treso: "Décaissements d'exploitation"
 - Positive amount → revenue → categorie_treso: "Encaissements d'exploitation"
-- Unclear description (FACT, REF, codes) → infer from business activity "${activity}" and amount sign
 - Default expense: poste "Achats de prestations de services", categorie_pnl "Charges d'exploitation"
 - Default revenue: poste "Chiffre d'affaires", categorie_pnl "Produits d'exploitation"
 - Clear keyword → confidence 90-100, needs_review false
-- Medium clarity → confidence 60-80, needs_review false  
+- Medium clarity → confidence 60-80, needs_review false
 - Low clarity → confidence 30-60, needs_review true
 - Taxes → "Impôts et taxes", Salaries → "Masse salariale"
 
