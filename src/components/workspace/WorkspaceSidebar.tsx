@@ -14,6 +14,7 @@ import {
   BookOpenCheck,
   CreditCard,
   HelpCircle,
+  Receipt,
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useProjectStore } from '@/store/useProjectStore';
@@ -35,6 +36,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 
 const navItems = [
   { title: 'Overview', url: 'overview', icon: LayoutDashboard },
+  { title: 'Invoices', url: 'invoices', icon: Receipt },
   { title: 'Journal Classification', url: 'journal-classification', icon: Tags },
   { title: 'Mapping', url: 'mapping', icon: GitBranch },
   { title: 'Journal Entries', url: 'journal-entries', icon: BookOpen },

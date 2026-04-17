@@ -14,7 +14,108 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      invoices: {
+        Row: {
+          account_code: string | null
+          ai_entry: Json | null
+          ai_raw_response: Json | null
+          amount_ht: number | null
+          amount_ttc: number | null
+          categorie_pnl: string | null
+          categorie_treso: string | null
+          confidence: number | null
+          created_at: string
+          currency: string | null
+          due_date: string | null
+          error_message: string | null
+          file_name: string
+          file_path: string
+          file_size: number | null
+          file_type: string
+          id: string
+          invoice_date: string | null
+          invoice_number: string | null
+          journal_entry_id: string | null
+          needs_review: boolean | null
+          poste: string | null
+          processing_step: string | null
+          project_id: string
+          raw_text: string | null
+          status: string
+          supplier: string | null
+          updated_at: string
+          user_id: string
+          validated_at: string | null
+          vat_amount: number | null
+        }
+        Insert: {
+          account_code?: string | null
+          ai_entry?: Json | null
+          ai_raw_response?: Json | null
+          amount_ht?: number | null
+          amount_ttc?: number | null
+          categorie_pnl?: string | null
+          categorie_treso?: string | null
+          confidence?: number | null
+          created_at?: string
+          currency?: string | null
+          due_date?: string | null
+          error_message?: string | null
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          file_type: string
+          id?: string
+          invoice_date?: string | null
+          invoice_number?: string | null
+          journal_entry_id?: string | null
+          needs_review?: boolean | null
+          poste?: string | null
+          processing_step?: string | null
+          project_id: string
+          raw_text?: string | null
+          status?: string
+          supplier?: string | null
+          updated_at?: string
+          user_id: string
+          validated_at?: string | null
+          vat_amount?: number | null
+        }
+        Update: {
+          account_code?: string | null
+          ai_entry?: Json | null
+          ai_raw_response?: Json | null
+          amount_ht?: number | null
+          amount_ttc?: number | null
+          categorie_pnl?: string | null
+          categorie_treso?: string | null
+          confidence?: number | null
+          created_at?: string
+          currency?: string | null
+          due_date?: string | null
+          error_message?: string | null
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          file_type?: string
+          id?: string
+          invoice_date?: string | null
+          invoice_number?: string | null
+          journal_entry_id?: string | null
+          needs_review?: boolean | null
+          poste?: string | null
+          processing_step?: string | null
+          project_id?: string
+          raw_text?: string | null
+          status?: string
+          supplier?: string | null
+          updated_at?: string
+          user_id?: string
+          validated_at?: string | null
+          vat_amount?: number | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

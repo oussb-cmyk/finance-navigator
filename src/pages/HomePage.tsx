@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Building2, Calendar, FileText, AlertTriangle, Trash2 } from 'lucide-react';
+import { Plus, Building2, Calendar, FileText, AlertTriangle, Trash2, LogIn, LogOut, User } from 'lucide-react';
 import { useProjectStore } from '@/store/useProjectStore';
+import { useAuth } from '@/hooks/useAuth';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -11,6 +12,7 @@ import { Label } from '@/components/ui/label';
 
 export default function HomePage() {
   const { projects, addProject, deleteProject } = useProjectStore();
+  const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: '', company: '', activity: '', activityDescription: '', currency: 'USD' });
@@ -51,10 +53,25 @@ export default function HomePage() {
               <p className="text-xs text-muted-foreground">Financial Data Processing Platform</p>
             </div>
           </div>
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button><Plus className="h-4 w-4 mr-2" />New Project</Button>
-            </DialogTrigger>
+          <div className="flex items-center gap-2">
+            {user ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground hidden sm:inline-flex items-center gap-1.5">
+                  <User className="h-3 w-3" />{user.email}
+                </span>
+                <Button variant="ghost" size="sm" onClick={signOut} title="Sign out">
+                  <LogOut className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <Button variant="outline" size="sm" onClick={() => navigate('/auth')}>
+                <LogIn className="h-4 w-4 mr-2" />Sign In
+              </Button>
+            )}
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild>
+                <Button><Plus className="h-4 w-4 mr-2" />New Project</Button>
+              </DialogTrigger>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Create New Project</DialogTitle>
@@ -89,8 +106,9 @@ export default function HomePage() {
                 </div>
                 <Button onClick={handleCreate} className="w-full" disabled={!form.name || !form.company || !form.activity}>Create Project</Button>
               </div>
-            </DialogContent>
-          </Dialog>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
       </header>
 
