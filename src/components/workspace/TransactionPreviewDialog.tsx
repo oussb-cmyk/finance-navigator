@@ -188,10 +188,7 @@ export function TransactionPreviewDialog({
       toast.info('All transactions are already categorized');
       return;
     }
-    if (!activity) {
-      toast.error('Project activity is missing — cannot run AI categorization');
-      return;
-    }
+    const effectiveActivity = activity?.trim() || 'General Business';
 
     setIsCategorizing(true);
     const loadingId = toast.loading(`AI categorizing ${targets.length} transactions...`);
@@ -210,7 +207,7 @@ export function TransactionPreviewDialog({
         }));
 
         const { data, error } = await supabase.functions.invoke('categorize-transactions', {
-          body: { transactions: payload, activity },
+          body: { transactions: payload, activity: effectiveActivity },
         });
 
         if (error) {
