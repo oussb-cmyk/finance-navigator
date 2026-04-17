@@ -1,0 +1,33 @@
+export interface InvoiceRow {
+  id: string;
+  user_id: string;
+  project_id: string;
+  file_path: string;
+  file_name: string;
+  file_type: string;
+  file_size: number | null;
+  status: 'processing' | 'ocr_failed' | 'ai_failed' | 'to_review' | 'validated' | 'error';
+  processing_step: string | null;
+  error_message: string | null;
+  supplier: string | null;
+  invoice_number: string | null;
+  invoice_date: string | null;
+  due_date: string | null;
+  amount_ht: number | null;
+  amount_ttc: number | null;
+  vat_amount: number | null;
+  currency: string | null;
+  raw_text: string | null;
+  account_code: string | null;
+  poste: string | null;
+  categorie_treso: string | null;
+  categorie_pnl: string | null;
+  ai_entry: { debit: { account: string; amount: number; label: string }[]; credit: { account: string; amount: number; label: string }[] } | null;
+  confidence: number | null;
+  needs_review: boolean | null;
+  ai_raw_response: unknown;
+  validated_at: string | null;
+  journal_entry_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
