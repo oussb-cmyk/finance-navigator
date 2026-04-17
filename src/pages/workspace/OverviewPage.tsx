@@ -31,14 +31,7 @@ export default function OverviewPage() {
     }
   }, [project?.id, project?.activity, project?.activityDescription]);
 
-export default function OverviewPage() {
-  const { projectId } = useParams();
-  const pid = projectId || '';
-  const project = useProjectStore((s) => s.projects.find((p) => p.id === projectId));
-  const files = useProjectFiles(pid);
-  const entries = useProjectEntries(pid);
-  const mappings = useProjectMappings(pid);
-
+  if (!project) return <div className="text-muted-foreground">Project not found</div>;
   if (!project) return <div className="text-muted-foreground">Project not found</div>;
 
   const totalRevenue = entries.filter(e => e.accountCode.startsWith('4')).reduce((s, e) => s + e.credit, 0);
