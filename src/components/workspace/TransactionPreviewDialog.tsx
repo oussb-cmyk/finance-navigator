@@ -104,6 +104,7 @@ export function TransactionPreviewDialog({
   const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Transaction>>({});
+  const [isCategorizing, setIsCategorizing] = useState(false);
 
   // Initialize transactions when mapping is confirmed
   const confirmMapping = () => {
