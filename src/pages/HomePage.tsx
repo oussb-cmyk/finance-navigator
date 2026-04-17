@@ -6,13 +6,14 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 
 export default function HomePage() {
   const { projects, addProject, deleteProject } = useProjectStore();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ name: '', company: '', activity: '', currency: 'USD' });
+  const [form, setForm] = useState({ name: '', company: '', activity: '', activityDescription: '', currency: 'USD' });
 
   const handleCreate = () => {
     if (!form.name || !form.company || !form.activity) return;
@@ -22,6 +23,7 @@ export default function HomePage() {
       name: form.name,
       company: form.company,
       activity: form.activity,
+      activityDescription: form.activityDescription,
       currency: form.currency,
       fiscalYearEnd: new Date().toISOString().slice(0, 10),
       createdAt: new Date().toISOString().slice(0, 10),
@@ -31,7 +33,7 @@ export default function HomePage() {
       entriesCount: 0,
       unmappedAccounts: 0,
     });
-    setForm({ name: '', company: '', activity: '', currency: 'USD' });
+    setForm({ name: '', company: '', activity: '', activityDescription: '', currency: 'USD' });
     setOpen(false);
     navigate(`/project/${id}/overview`);
   };
@@ -70,6 +72,16 @@ export default function HomePage() {
                   <Label>Business Activity <span className="text-destructive">*</span></Label>
                   <Input placeholder="e.g. Restaurant, SaaS, Real Estate, E-commerce, Consulting" value={form.activity} onChange={(e) => setForm({ ...form, activity: e.target.value })} />
                   <p className="text-xs text-muted-foreground mt-1">Used for AI-powered transaction categorization</p>
+                </div>
+                <div>
+                  <Label>Activity Description <span className="text-muted-foreground text-xs font-normal">(optional, recommended)</span></Label>
+                  <Textarea
+                    placeholder="e.g. Independent live music venue with bar service. Revenue from ticket sales (TICKETNET, SeeTickets) and bar. Main expenses: artist fees, SACEM, URSSAF, rent."
+                    value={form.activityDescription}
+                    onChange={(e) => setForm({ ...form, activityDescription: e.target.value })}
+                    rows={4}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Richer context = smarter AI categorization (revenue streams, suppliers, recurring expenses…)</p>
                 </div>
                 <div>
                   <Label>Currency</Label>

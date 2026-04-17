@@ -939,7 +939,7 @@ export default function DataCenterPage() {
           learnedPatterns={useTransactionStore.getState().getLearnedPatterns(pid)}
           activity={useProjectStore.getState().projects.find(p => p.id === pid)?.activity}
           companyName={useProjectStore.getState().projects.find(p => p.id === pid)?.company}
-          activityDescription={useProjectStore.getState().projects.find(p => p.id === pid)?.activity}
+          activityDescription={useProjectStore.getState().projects.find(p => p.id === pid)?.activityDescription}
           onConfirm={handleTxPreviewConfirm}
         />
       )}

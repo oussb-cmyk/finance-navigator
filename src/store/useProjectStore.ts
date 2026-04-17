@@ -15,6 +15,7 @@ interface ProjectStore {
   
   setCurrentProject: (id: string | null) => void;
   addProject: (project: Project) => void;
+  updateProject: (id: string, patch: Partial<Project>) => void;
   deleteProject: (id: string) => void;
   addFile: (projectId: string, file: UploadedFile) => void;
   updateFileStatus: (projectId: string, fileId: string, status: UploadedFile['status'], entriesExtracted?: number) => void;
@@ -85,6 +86,10 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     files: { ...s.files, [project.id]: [] },
     mappings: { ...s.mappings, [project.id]: [] },
     entries: { ...s.entries, [project.id]: [] },
+  })),
+
+  updateProject: (id, patch) => set((s) => ({
+    projects: s.projects.map((p) => (p.id === id ? { ...p, ...patch, updatedAt: new Date().toISOString().slice(0, 10) } : p)),
   })),
 
   deleteProject: (id) => set((s) => ({
