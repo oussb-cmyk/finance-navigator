@@ -1,9 +1,35 @@
+import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useProjectStore } from '@/store/useProjectStore';
 import { useProjectFiles, useProjectEntries, useProjectMappings } from '@/hooks/useStableStoreSelectors';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { KPICard } from '@/components/shared/KPICard';
-import { FileText, BookOpen, GitBranch, CheckCircle, DollarSign, TrendingUp, BarChart3, AlertTriangle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { toast } from 'sonner';
+import { FileText, BookOpen, GitBranch, CheckCircle, DollarSign, TrendingUp, BarChart3, AlertTriangle, Sparkles, Save, Pencil } from 'lucide-react';
+
+export default function OverviewPage() {
+  const { projectId } = useParams();
+  const pid = projectId || '';
+  const project = useProjectStore((s) => s.projects.find((p) => p.id === projectId));
+  const updateProject = useProjectStore((s) => s.updateProject);
+  const files = useProjectFiles(pid);
+  const entries = useProjectEntries(pid);
+  const mappings = useProjectMappings(pid);
+
+  const [editing, setEditing] = useState(false);
+  const [activity, setActivity] = useState('');
+  const [activityDescription, setActivityDescription] = useState('');
+
+  useEffect(() => {
+    if (project) {
+      setActivity(project.activity || '');
+      setActivityDescription(project.activityDescription || '');
+    }
+  }, [project?.id, project?.activity, project?.activityDescription]);
 
 export default function OverviewPage() {
   const { projectId } = useParams();
