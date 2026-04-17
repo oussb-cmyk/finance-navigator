@@ -181,18 +181,79 @@ export function TransactionPreviewDialog({
     }
   };
 
-  const handleAutoCategorize = () => {
-    let count = 0;
-    setTransactions(prev => prev.map(t => {
-      if (t.isMapped && t.poste && t.poste !== 'Autres charges') return t;
-      const suggestion = autoCategorize(t.description, t.amount, learnedPatterns);
-      if (suggestion.confidence >= 60) {
-        count++;
-        return { ...t, poste: suggestion.poste, categorieTreso: suggestion.categorieTreso, categoriePnL: suggestion.categoriePnL, isMapped: true, _confidence: suggestion.confidence };
+  const handleAutoCategorize = async () => {
+    // Determine which rows need categorization
+    const targets = transactions.filter(t => !t.isMapped || !t.poste || t.poste === 'Autres charges');
+    if (targets.length === 0) {
+      toast.info('All transactions are already categorized');
+      return;
+    }
+    if (!activity) {
+      toast.error('Project activity is missing — cannot run AI categorization');
+      return;
+    }
+
+    setIsCategorizing(true);
+    const loadingId = toast.loading(`AI categorizing ${targets.length} transactions...`);
+
+    try {
+      const BATCH_SIZE = 25;
+      const updates = new Map<string, { poste: string; categorieTreso: string; categoriePnL: string; confidence: number }>();
+
+      for (let i = 0; i < targets.length; i += BATCH_SIZE) {
+        const batch = targets.slice(i, i + BATCH_SIZE);
+        const payload = batch.map(t => ({
+          id: t.id,
+          description: t.description,
+          amount: t.amount,
+          sourceAccount: t.sourceAccount,
+        }));
+
+        const { data, error } = await supabase.functions.invoke('categorize-transactions', {
+          body: { transactions: payload, activity },
+        });
+
+        if (error) {
+          console.error('AI invoke error:', error);
+          throw new Error(error.message || 'AI request failed');
+        }
+        const results = (data as { results?: Array<{ poste: string; categorie_treso: string; categorie_pnl: string; confidence: number; needs_review: boolean }> })?.results || [];
+        results.forEach((r, idx) => {
+          const tx = batch[idx];
+          if (!tx || !r) return;
+          updates.set(tx.id, {
+            poste: r.poste,
+            categorieTreso: r.categorie_treso,
+            categoriePnL: r.categorie_pnl,
+            confidence: typeof r.confidence === 'number' ? r.confidence : 50,
+          });
+        });
       }
-      return t;
-    }));
-    toast.success(`Auto-categorized ${count} transactions`);
+
+      let count = 0;
+      setTransactions(prev => prev.map(t => {
+        const u = updates.get(t.id);
+        if (!u) return t;
+        count++;
+        return {
+          ...t,
+          poste: u.poste,
+          categorieTreso: u.categorieTreso,
+          categoriePnL: u.categoriePnL,
+          isMapped: !!(u.poste && u.categorieTreso && u.categoriePnL),
+          _confidence: u.confidence,
+        };
+      }));
+
+      toast.dismiss(loadingId);
+      toast.success(`AI categorized ${count} transactions`);
+    } catch (e) {
+      toast.dismiss(loadingId);
+      console.error('Auto-categorize error:', e);
+      toast.error(e instanceof Error ? e.message : 'AI categorization failed');
+    } finally {
+      setIsCategorizing(false);
+    }
   };
 
   const startEdit = (tx: Transaction) => {
