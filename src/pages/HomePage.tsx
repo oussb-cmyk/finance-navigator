@@ -106,8 +106,9 @@ export default function HomePage() {
                 </div>
                 <Button onClick={handleCreate} className="w-full" disabled={!form.name || !form.company || !form.activity}>Create Project</Button>
               </div>
-            </DialogContent>
-          </Dialog>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
       </header>
 
