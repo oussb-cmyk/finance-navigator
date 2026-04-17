@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Building2, Calendar, FileText, AlertTriangle, Trash2 } from 'lucide-react';
+import { Plus, Building2, Calendar, FileText, AlertTriangle, Trash2, LogIn, LogOut, User } from 'lucide-react';
 import { useProjectStore } from '@/store/useProjectStore';
+import { useAuth } from '@/hooks/useAuth';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -11,6 +12,7 @@ import { Label } from '@/components/ui/label';
 
 export default function HomePage() {
   const { projects, addProject, deleteProject } = useProjectStore();
+  const { user, signOut } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: '', company: '', activity: '', activityDescription: '', currency: 'USD' });
