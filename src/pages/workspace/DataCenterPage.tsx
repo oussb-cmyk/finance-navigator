@@ -937,6 +937,7 @@ export default function DataCenterPage() {
           fileName={txPreview.fileName}
           detectedColumns={txPreview.detectedColumns}
           learnedPatterns={useTransactionStore.getState().getLearnedPatterns(pid)}
+          activity={useProjectStore.getState().projects.find(p => p.id === pid)?.activity}
           onConfirm={handleTxPreviewConfirm}
         />
       )}

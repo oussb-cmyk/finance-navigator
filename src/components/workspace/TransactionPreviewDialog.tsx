@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import { CheckCircle2, AlertTriangle, Search, Trash2, Sparkles, Download, ArrowRight, Edit3, X, Check } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Search, Trash2, Sparkles, Download, ArrowRight, Edit3, X, Check, Loader2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,7 @@ import { POSTES, CATEGORIES_TRESO, CATEGORIES_PNL } from '@/types/transaction';
 import type { Transaction } from '@/types/transaction';
 import { autoCategorize } from '@/lib/transactionCategorization';
 import type { LearnedPattern } from '@/lib/transactionCategorization';
+import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 interface ColumnDetection {
@@ -32,6 +33,7 @@ export interface TransactionPreviewDialogProps {
   fileName: string;
   detectedColumns: ColumnDetection;
   learnedPatterns: LearnedPattern[];
+  activity?: string;
   onConfirm: (transactions: Transaction[]) => void;
 }
 
@@ -65,7 +67,7 @@ function InlineSelect({ value, options, onChange, placeholder }: {
 }
 
 export function TransactionPreviewDialog({
-  open, onOpenChange, rawRows, headers, fileName, detectedColumns, learnedPatterns, onConfirm,
+  open, onOpenChange, rawRows, headers, fileName, detectedColumns, learnedPatterns, activity, onConfirm,
 }: TransactionPreviewDialogProps) {
   // Column mapping state (user can adjust)
   const [colMap, setColMap] = useState<ColumnDetection>(detectedColumns);
@@ -102,6 +104,7 @@ export function TransactionPreviewDialog({
   const [searchQuery, setSearchQuery] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Transaction>>({});
+  const [isCategorizing, setIsCategorizing] = useState(false);
 
   // Initialize transactions when mapping is confirmed
   const confirmMapping = () => {
@@ -178,18 +181,79 @@ export function TransactionPreviewDialog({
     }
   };
 
-  const handleAutoCategorize = () => {
-    let count = 0;
-    setTransactions(prev => prev.map(t => {
-      if (t.isMapped && t.poste && t.poste !== 'Autres charges') return t;
-      const suggestion = autoCategorize(t.description, t.amount, learnedPatterns);
-      if (suggestion.confidence >= 60) {
-        count++;
-        return { ...t, poste: suggestion.poste, categorieTreso: suggestion.categorieTreso, categoriePnL: suggestion.categoriePnL, isMapped: true, _confidence: suggestion.confidence };
+  const handleAutoCategorize = async () => {
+    // Determine which rows need categorization
+    const targets = transactions.filter(t => !t.isMapped || !t.poste || t.poste === 'Autres charges');
+    if (targets.length === 0) {
+      toast.info('All transactions are already categorized');
+      return;
+    }
+    if (!activity) {
+      toast.error('Project activity is missing — cannot run AI categorization');
+      return;
+    }
+
+    setIsCategorizing(true);
+    const loadingId = toast.loading(`AI categorizing ${targets.length} transactions...`);
+
+    try {
+      const BATCH_SIZE = 25;
+      const updates = new Map<string, { poste: string; categorieTreso: string; categoriePnL: string; confidence: number }>();
+
+      for (let i = 0; i < targets.length; i += BATCH_SIZE) {
+        const batch = targets.slice(i, i + BATCH_SIZE);
+        const payload = batch.map(t => ({
+          id: t.id,
+          description: t.description,
+          amount: t.amount,
+          sourceAccount: t.sourceAccount,
+        }));
+
+        const { data, error } = await supabase.functions.invoke('categorize-transactions', {
+          body: { transactions: payload, activity },
+        });
+
+        if (error) {
+          console.error('AI invoke error:', error);
+          throw new Error(error.message || 'AI request failed');
+        }
+        const results = (data as { results?: Array<{ poste: string; categorie_treso: string; categorie_pnl: string; confidence: number; needs_review: boolean }> })?.results || [];
+        results.forEach((r, idx) => {
+          const tx = batch[idx];
+          if (!tx || !r) return;
+          updates.set(tx.id, {
+            poste: r.poste,
+            categorieTreso: r.categorie_treso,
+            categoriePnL: r.categorie_pnl,
+            confidence: typeof r.confidence === 'number' ? r.confidence : 50,
+          });
+        });
       }
-      return t;
-    }));
-    toast.success(`Auto-categorized ${count} transactions`);
+
+      let count = 0;
+      setTransactions(prev => prev.map(t => {
+        const u = updates.get(t.id);
+        if (!u) return t;
+        count++;
+        return {
+          ...t,
+          poste: u.poste,
+          categorieTreso: u.categorieTreso,
+          categoriePnL: u.categoriePnL,
+          isMapped: !!(u.poste && u.categorieTreso && u.categoriePnL),
+          _confidence: u.confidence,
+        };
+      }));
+
+      toast.dismiss(loadingId);
+      toast.success(`AI categorized ${count} transactions`);
+    } catch (e) {
+      toast.dismiss(loadingId);
+      console.error('Auto-categorize error:', e);
+      toast.error(e instanceof Error ? e.message : 'AI categorization failed');
+    } finally {
+      setIsCategorizing(false);
+    }
   };
 
   const startEdit = (tx: Transaction) => {
@@ -352,8 +416,9 @@ export function TransactionPreviewDialog({
             <Input value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search transactions..." className="h-8 pl-8 text-xs" />
           </div>
-          <Button size="sm" variant="outline" onClick={handleAutoCategorize} className="h-8 text-xs gap-1">
-            <Sparkles className="h-3 w-3" /> Auto-categorize
+          <Button size="sm" variant="outline" onClick={handleAutoCategorize} disabled={isCategorizing} className="h-8 text-xs gap-1">
+            {isCategorizing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Sparkles className="h-3 w-3" />}
+            {isCategorizing ? 'Categorizing...' : 'Auto-categorize'}
           </Button>
           <Button size="sm" variant="outline" onClick={handleRemoveDuplicates} className="h-8 text-xs gap-1">
             Remove duplicates
